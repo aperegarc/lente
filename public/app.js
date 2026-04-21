@@ -121,6 +121,13 @@ async function loadFeed() {
   }
 }
 
+function toggleReadMore(id) {
+  const body = $(`body-${id}`);
+  const btn = $(`readmore-${id}`);
+  const collapsed = body.classList.toggle('collapsed');
+  btn.textContent = collapsed ? 'Leer más ↓' : 'Leer menos ↑';
+}
+
 function renderFeed(filterCategory = null) {
   const list = $('feed-list');
   const cards = filterCategory
@@ -168,7 +175,8 @@ function renderFeed(filterCategory = null) {
         <h2 class="headline">${c.headline}</h2>
         <p class="deck">${c.deck}</p>
         <div class="section-label">Qué ha pasado</div>
-        <p class="body-text">${c.body}</p>
+          <p class="body-text collapsed" id="body-${c.id}">${c.body}</p>
+          <button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button>
         <div class="meaning-box">
           <div class="section-label">¿Qué significa para ti?</div>
           <p class="meaning-text">${c.meaning}</p>

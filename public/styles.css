@@ -839,3 +839,25 @@ html, body {
   }
   body { background: #18181b; }
 }
+
+/* ===== Leer más ===== */
+.body-text.collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.read-more-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+.read-more-btn:hover { opacity: 0.8; }
