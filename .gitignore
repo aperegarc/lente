@@ -1,0 +1,29 @@
+# Dependencias
+node_modules/
+.pnp
+.pnp.js
+
+# Secretos
+.env
+.env.local
+.env.*.local
+
+# Build
+.vercel
+.next
+out/
+dist/
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

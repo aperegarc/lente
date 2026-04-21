@@ -1,0 +1,21 @@
+{
+  "name": "lente",
+  "version": "0.1.0",
+  "description": "App de noticias económicas explicadas. Fase A · MVP",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.3",
+    "@supabase/supabase-js": "^2.45.0",
+    "openai": "^4.53.0",
+    "rss-parser": "^3.13.0",
+    "yahoo-finance2": "^2.11.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
