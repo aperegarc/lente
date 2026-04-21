@@ -214,7 +214,7 @@ git init
 git add .
 git commit -m "Initial commit - lente MVP"
 git branch -M main
-git remote add origin https://github.com/TU-USUARIO/lente.git
+git remote add origin https://github.com/aperegarc/lente.git
 git push -u origin main
 ```
 
