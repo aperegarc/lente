@@ -787,7 +787,7 @@
    ============================================================ */
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LENTE_CONFIG;
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const state = {
   session: null,
@@ -809,7 +809,7 @@ function toast(msg, ms = 2200) {
 // ============ AUTH ============
 
 async function checkSession() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   state.session = session;
 
   if (!session) {
@@ -819,7 +819,7 @@ async function checkSession() {
   }
 
   // Verificar que es admin
-  const { data: profile } = await supabase
+  const { data: profile } = await supabaseClient
     .from('profiles')
     .select('is_admin')
     .eq('id', session.user.id)
@@ -855,7 +855,7 @@ async function sendMagicLink() {
   status.className = 'login-status show';
   status.textContent = 'Enviando enlace...';
 
-  const { error } = await supabase.auth.signInWithOtp({
+  const { error } = await supabaseClient.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: location.href },
   });
@@ -870,11 +870,11 @@ async function sendMagicLink() {
 }
 
 async function logout() {
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   location.reload();
 }
 
-supabase.auth.onAuthStateChange(() => {
+supabaseClient.auth.onAuthStateChange(() => {
   checkSession().then(ok => {
     if (ok) loadCards();
   });

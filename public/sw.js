@@ -31,6 +31,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+  const isHttpRequest = url.protocol === 'http:' || url.protocol === 'https:';
+
+  // Ignoramos esquemas no soportados (p.ej. chrome-extension://)
+  if (!isHttpRequest) {
+    return;
+  }
 
   // Nunca cacheamos las llamadas a la API de Supabase/backend
   if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase')) {
@@ -41,6 +47,10 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then(cached => {
       return cached || fetch(event.request).then(response => {
+        // Solo cacheamos respuestas válidas HTTP(S)
+        if (!response || response.status !== 200 || response.type === 'opaque') {
+          return response;
+        }
         // Guardamos en caché en segundo plano
         const copy = response.clone();
         caches.open(VERSION).then(cache => cache.put(event.request, copy));
