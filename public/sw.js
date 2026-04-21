@@ -43,3 +43,18 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(event.request).then(cached => cached || caches.match('/')))
   );
 });
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data === 'CLEAR_CACHE') {
+    caches.keys().then(keys =>
+      Promise.all(keys.map(k => caches.delete(k)))
+    ).then(() => {
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => client.postMessage('RELOAD'));
+      });
+    });
+  }
+});

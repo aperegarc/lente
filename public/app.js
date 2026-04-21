@@ -57,6 +57,26 @@ function toast(msg, ms = 2200) {
   setTimeout(() => t.classList.remove('show'), ms);
 }
 
+async function checkCacheVersion() {
+  try {
+    const res = await fetch('/api/feed'); // reutilizamos cualquier endpoint
+    const stored = localStorage.getItem('lente.cache_version');
+    
+    const { data } = await supabaseClient
+      .from('app_config')
+      .select('value')
+      .eq('key', 'cache_version')
+      .single();
+
+    if (data && data.value !== stored) {
+      localStorage.setItem('lente.cache_version', data.value);
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage('CLEAR_CACHE');
+      }
+    }
+  } catch { /* silencioso */ }
+}
+
 function fmtDate(iso) {
   if (!iso) return 'Hoy';
   const d = new Date(iso);
@@ -127,6 +147,7 @@ function toggleReadMore(id) {
   const collapsed = body.classList.toggle('collapsed');
   btn.textContent = collapsed ? 'Leer más ↓' : 'Leer menos ↑';
 }
+
 
 function renderFeed(filterCategory = null) {
   const list = $('feed-list');
@@ -528,6 +549,15 @@ async function shareCard(id) {
 // ============================================================
 // AUTH
 // ============================================================
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data === 'RELOAD') {
+      window.location.reload();
+    }
+  });
+}
+
 async function openProfile() {
   if (state.session) {
     if (confirm(`Sesión iniciada como ${state.session.user.email}. ¿Cerrar sesión?`)) {
@@ -557,6 +587,7 @@ function showTab(mode) {
   $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
   $('login-status').textContent = '';
 }
+
 
 async function submitLogin() {
   const email = $('login-email').value.trim();
@@ -649,6 +680,7 @@ async function init() {
   await loadSavedCards();
   await loadMarkets();   // para el ticker
   await loadFeed();
+  await checkCacheVersion();
 }
 
 init();

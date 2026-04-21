@@ -1,1039 +1,1277 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>lente · Admin</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>lente · Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
 
-  :root {
-    --bg: #0a0a0a;
-    --bg-card: #141414;
-    --bg-elevated: #1c1c1c;
-    --bg-hover: #222;
-    --ink: #f5f2ea;
-    --ink-dim: #9a958b;
-    --ink-muted: #5c5852;
-    --border: #252220;
-    --border-light: #3a3530;
-    --accent: #c9a961;
-    --green: #6fae5f;
-    --red: #d66a5c;
-    --blue: #6b8eae;
-    --purple: #a585b8;
-  }
+    :root {
+      --bg: #0a0a0a;
+      --bg-card: #141414;
+      --bg-elevated: #1c1c1c;
+      --bg-hover: #222;
+      --ink: #f5f2ea;
+      --ink-dim: #9a958b;
+      --ink-muted: #5c5852;
+      --border: #252220;
+      --border-light: #3a3530;
+      --accent: #c9a961;
+      --green: #6fae5f;
+      --red: #d66a5c;
+      --blue: #6b8eae;
+      --purple: #a585b8;
+    }
 
-  body {
-    background: #0a0a0a;
-    font-family: 'Inter', sans-serif;
-    color: var(--ink);
-    min-height: 100vh;
-    font-size: 14px;
-  }
+    body {
+      background: #0a0a0a;
+      font-family: 'Inter', sans-serif;
+      color: var(--ink);
+      min-height: 100vh;
+      font-size: 14px;
+    }
 
-  .app {
-    display: grid;
-    grid-template-columns: 260px 1fr;
-    min-height: 100vh;
-  }
+    .app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
 
-  @media (max-width: 900px) {
-    .app { grid-template-columns: 1fr; }
-  }
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+    }
 
-  /* Sidebar */
-  .sidebar {
-    background: #0a0a0a;
-    border-right: 1px solid var(--border);
-    padding: 28px 20px;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
-  }
+    /* Sidebar */
+    .sidebar {
+      background: #0a0a0a;
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
 
-  .brand {
-    font-family: 'Fraunces', serif;
-    font-style: italic;
-    font-weight: 500;
-    font-size: 24px;
-    color: var(--ink);
-    letter-spacing: -0.02em;
-    margin-bottom: 2px;
-  }
-  .brand-dot { color: var(--accent); }
-  .brand-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 32px;
-  }
+    .brand {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 500;
+      font-size: 24px;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+      margin-bottom: 2px;
+    }
 
-  .nav-section { margin-bottom: 24px; }
-  .nav-title {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-bottom: 10px;
-    padding: 0 4px;
-  }
+    .brand-dot {
+      color: var(--accent);
+    }
 
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    border-radius: 5px;
-    color: var(--ink-dim);
-    cursor: pointer;
-    margin-bottom: 2px;
-    font-size: 13px;
-    border: 1px solid transparent;
-    text-decoration: none;
-  }
-  .nav-item:hover { background: var(--bg-card); color: var(--ink); }
-  .nav-item.active {
-    background: rgba(201, 169, 97, 0.08);
-    color: var(--accent);
-    border-color: rgba(201, 169, 97, 0.2);
-  }
-  .nav-item svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .brand-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 32px;
+    }
 
-  .nav-badge {
-    margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    padding: 2px 7px;
-    background: var(--bg-card);
-    border-radius: 3px;
-    color: var(--ink-dim);
-  }
-  .nav-item.active .nav-badge { background: rgba(201, 169, 97, 0.2); color: var(--accent); }
+    .nav-section {
+      margin-bottom: 24px;
+    }
 
-  .auth-box {
-    padding: 14px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin-top: 24px;
-  }
-  .auth-box-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-bottom: 6px;
-  }
-  .auth-email {
-    font-size: 12px;
-    color: var(--ink);
-    word-break: break-all;
-    margin-bottom: 10px;
-  }
-  .auth-logout {
-    width: 100%;
-    padding: 7px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--ink-dim);
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .auth-logout:hover { color: var(--red); border-color: var(--red); }
+    .nav-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-bottom: 10px;
+      padding: 0 4px;
+    }
 
-  /* Main */
-  .main {
-    padding: 40px 48px 80px;
-    max-width: 1200px;
-  }
-  @media (max-width: 900px) { .main { padding: 24px; } }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 5px;
+      color: var(--ink-dim);
+      cursor: pointer;
+      margin-bottom: 2px;
+      font-size: 13px;
+      border: 1px solid transparent;
+      text-decoration: none;
+    }
 
-  .main-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    margin-bottom: 32px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-    gap: 12px;
-  }
+    .nav-item:hover {
+      background: var(--bg-card);
+      color: var(--ink);
+    }
 
-  .main-title {
-    font-family: 'Fraunces', serif;
-    font-size: 36px;
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    line-height: 1.1;
-    margin-bottom: 6px;
-  }
-  .main-title em { font-style: italic; color: var(--accent); }
+    .nav-item.active {
+      background: rgba(201, 169, 97, 0.08);
+      color: var(--accent);
+      border-color: rgba(201, 169, 97, 0.2);
+    }
 
-  .main-sub {
-    font-size: 13px;
-    color: var(--ink-dim);
-    line-height: 1.5;
-    max-width: 620px;
-  }
+    .nav-item svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+    }
 
-  .main-actions { display: flex; gap: 10px; flex-shrink: 0; }
+    .nav-badge {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 2px 7px;
+      background: var(--bg-card);
+      border-radius: 3px;
+      color: var(--ink-dim);
+    }
 
-  /* Botones */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 16px;
-    border-radius: 5px;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--bg-card);
-    color: var(--ink);
-    transition: all 0.15s;
-  }
-  .btn:hover { background: var(--bg-hover); border-color: var(--border-light); }
-  .btn-primary {
-    background: var(--accent);
-    color: #1a1208;
-    border-color: var(--accent);
-    font-weight: 600;
-  }
-  .btn-primary:hover { background: #d9b971; border-color: #d9b971; }
-  .btn-ghost { background: transparent; color: var(--ink-dim); }
-  .btn-danger { background: transparent; border-color: rgba(214, 106, 92, 0.4); color: var(--red); }
-  .btn-danger:hover { background: rgba(214, 106, 92, 0.08); }
-  .btn-sm { padding: 6px 11px; font-size: 12px; }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .nav-item.active .nav-badge {
+      background: rgba(201, 169, 97, 0.2);
+      color: var(--accent);
+    }
 
-  /* Stats row */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-    margin-bottom: 32px;
-  }
-  @media (max-width: 700px) { .stats-row { grid-template-columns: 1fr 1fr; } }
+    .auth-box {
+      padding: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-top: 24px;
+    }
 
-  .stat-card {
-    padding: 16px 18px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-  }
-  .stat-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-bottom: 6px;
-  }
-  .stat-value {
-    font-family: 'Fraunces', serif;
-    font-size: 28px;
-    font-weight: 500;
-    color: var(--ink);
-    letter-spacing: -0.01em;
-  }
-  .stat-sub {
-    font-size: 11px;
-    color: var(--ink-dim);
-    margin-top: 2px;
-  }
+    .auth-box-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-bottom: 6px;
+    }
 
-  /* Filter tabs */
-  .filter-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 20px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-  }
-  .filter-tab {
-    flex-shrink: 0;
-    padding: 7px 13px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--ink-dim);
-    font-size: 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .filter-tab.active {
-    background: rgba(201, 169, 97, 0.08);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .filter-tab-count {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    background: var(--bg-elevated);
-    padding: 1px 6px;
-    border-radius: 2px;
-    color: var(--ink-muted);
-  }
-  .filter-tab.active .filter-tab-count { background: var(--accent); color: #1a1208; }
+    .auth-email {
+      font-size: 12px;
+      color: var(--ink);
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
 
-  /* Card grid */
-  .cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    gap: 18px;
-  }
+    .auth-logout {
+      width: 100%;
+      padding: 7px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--ink-dim);
+      font-size: 12px;
+      cursor: pointer;
+    }
 
-  .review-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-  .review-card.approved { border-color: rgba(111, 174, 95, 0.3); }
-  .review-card.rejected { border-color: rgba(214, 106, 92, 0.3); opacity: 0.55; }
-  .review-card.published { border-color: rgba(107, 142, 174, 0.3); }
+    .auth-logout:hover {
+      color: var(--red);
+      border-color: var(--red);
+    }
 
-  .rc-head {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
+    /* Main */
+    .main {
+      padding: 40px 48px 80px;
+      max-width: 1200px;
+    }
 
-  .rc-cat {
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
-    font-weight: 600;
-  }
+    @media (max-width: 900px) {
+      .main {
+        padding: 24px;
+      }
+    }
 
-  .rc-status {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 3px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-  .rc-status.pending   { background: rgba(201,169,97,0.12); color: var(--accent); }
-  .rc-status.approved  { background: rgba(111,174,95,0.12); color: var(--green); }
-  .rc-status.rejected  { background: rgba(214,106,92,0.12); color: var(--red); }
-  .rc-status.published { background: rgba(107,142,174,0.12); color: var(--blue); }
+    .main-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
 
-  .rc-body { padding: 18px 20px; flex: 1; }
+    .main-title {
+      font-family: 'Fraunces', serif;
+      font-size: 36px;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin-bottom: 6px;
+    }
 
-  .rc-headline {
-    font-family: 'Fraunces', serif;
-    font-size: 20px;
-    font-weight: 500;
-    line-height: 1.15;
-    margin-bottom: 10px;
-    letter-spacing: -0.01em;
-  }
-  .rc-headline em { font-style: italic; color: var(--accent); font-weight: 400; }
+    .main-title em {
+      font-style: italic;
+      color: var(--accent);
+    }
 
-  .rc-deck {
-    font-size: 13px;
-    color: var(--ink-dim);
-    line-height: 1.5;
-    margin-bottom: 14px;
-  }
+    .main-sub {
+      font-size: 13px;
+      color: var(--ink-dim);
+      line-height: 1.5;
+      max-width: 620px;
+    }
 
-  .rc-section {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-bottom: 5px;
-  }
+    .main-actions {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0;
+    }
 
-  .rc-text {
-    font-size: 12.5px;
-    line-height: 1.6;
-    color: var(--ink);
-    margin-bottom: 14px;
-    font-weight: 300;
-  }
+    /* Botones */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px;
+      border-radius: 5px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--ink);
+      transition: all 0.15s;
+    }
 
-  .rc-meaning {
-    background: var(--bg);
-    border-left: 2px solid var(--accent);
-    padding: 10px 14px;
-    margin-bottom: 14px;
-    border-radius: 0 4px 4px 0;
-  }
-  .rc-meaning .rc-section { color: var(--accent); }
+    .btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-light);
+    }
 
-  .rc-sources {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: var(--ink-muted);
-  }
+    .btn-primary {
+      background: var(--accent);
+      color: #1a1208;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
 
-  .rc-actions {
-    display: flex;
-    gap: 6px;
-    padding: 12px 16px;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
+    .btn-primary:hover {
+      background: #d9b971;
+      border-color: #d9b971;
+    }
 
-  /* Login card */
-  .login-page {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 20px;
-    background:
-      radial-gradient(ellipse at top, rgba(201, 169, 97, 0.06), transparent 50%),
-      var(--bg);
-  }
-  .login-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 36px;
-    max-width: 420px;
-    width: 100%;
-  }
-  .login-brand {
-    font-family: 'Fraunces', serif;
-    font-style: italic;
-    font-weight: 500;
-    font-size: 34px;
-    letter-spacing: -0.02em;
-    margin-bottom: 2px;
-  }
-  .login-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 28px;
-  }
-  .login-title {
-    font-family: 'Fraunces', serif;
-    font-size: 24px;
-    font-weight: 400;
-    margin-bottom: 10px;
-    line-height: 1.2;
-  }
-  .login-help {
-    font-size: 13px;
-    color: var(--ink-dim);
-    line-height: 1.5;
-    margin-bottom: 22px;
-  }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink-dim);
+    }
 
-  .field { margin-bottom: 16px; }
-  .field label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-bottom: 6px;
-    display: block;
-  }
-  .field input, .field select, .field textarea {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 10px 13px;
-    color: var(--ink);
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    transition: border 0.15s;
-  }
-  .field input:focus, .field textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-  .field textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
-  .field-hint { font-size: 11px; color: var(--ink-muted); margin-top: 5px; line-height: 1.4; }
+    .btn-danger {
+      background: transparent;
+      border-color: rgba(214, 106, 92, 0.4);
+      color: var(--red);
+    }
 
-  .login-status {
-    margin-top: 14px;
-    font-size: 12px;
-    padding: 10px 12px;
-    border-radius: 4px;
-    display: none;
-  }
-  .login-status.show { display: block; }
-  .login-status.success { background: rgba(111,174,95,0.08); color: var(--green); border: 1px solid rgba(111,174,95,0.25); }
-  .login-status.error { background: rgba(214,106,92,0.08); color: var(--red); border: 1px solid rgba(214,106,92,0.25); }
+    .btn-danger:hover {
+      background: rgba(214, 106, 92, 0.08);
+    }
 
-  /* Modal edición */
-  .modal-bg {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.78);
-    backdrop-filter: blur(6px);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    padding: 20px;
-  }
-  .modal-bg.open { display: flex; }
-  .modal {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    max-width: 720px;
-    width: 100%;
-    max-height: 92vh;
-    overflow-y: auto;
-  }
-  .modal-head {
-    padding: 18px 24px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    position: sticky;
-    top: 0;
-    background: var(--bg-card);
-    z-index: 1;
-  }
-  .modal-title {
-    font-family: 'Fraunces', serif;
-    font-size: 22px;
-    font-weight: 400;
-    letter-spacing: -0.01em;
-  }
-  .modal-title em { font-style: italic; color: var(--accent); }
-  .modal-body { padding: 24px; }
-  .modal-foot {
-    padding: 16px 24px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    position: sticky;
-    bottom: 0;
-    background: var(--bg-card);
-  }
+    .btn-sm {
+      padding: 6px 11px;
+      font-size: 12px;
+    }
 
-  .icon-btn {
-    width: 30px;
-    height: 30px;
-    background: transparent;
-    border: none;
-    color: var(--ink-dim);
-    font-size: 18px;
-    cursor: pointer;
-    border-radius: 4px;
-  }
-  .icon-btn:hover { background: var(--bg-hover); color: var(--ink); }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
 
-  /* Empty */
-  .empty {
-    padding: 80px 20px;
-    text-align: center;
-    grid-column: 1 / -1;
-  }
-  .empty-title {
-    font-family: 'Fraunces', serif;
-    font-style: italic;
-    font-size: 24px;
-    color: var(--ink-dim);
-    margin-bottom: 10px;
-  }
-  .empty p { color: var(--ink-muted); font-size: 13px; }
+    .btn svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+    }
 
-  /* Toast */
-  .toast {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    padding: 12px 18px;
-    background: var(--ink);
-    color: #0a0a0a;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-    transform: translateY(100px);
-    opacity: 0;
-    transition: all 0.25s;
-    z-index: 200;
-  }
-  .toast.show { transform: translateY(0); opacity: 1; }
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 32px;
+    }
 
-  /* Loading */
-  .loading {
-    padding: 60px;
-    text-align: center;
-    color: var(--ink-muted);
-    font-size: 13px;
-  }
-</style>
+    @media (max-width: 700px) {
+      .stats-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .stat-card {
+      padding: 16px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-family: 'Fraunces', serif;
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--ink-dim);
+      margin-top: 2px;
+    }
+
+    /* Filter tabs */
+    .filter-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .filter-tab {
+      flex-shrink: 0;
+      padding: 7px 13px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--ink-dim);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filter-tab.active {
+      background: rgba(201, 169, 97, 0.08);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .filter-tab-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      background: var(--bg-elevated);
+      padding: 1px 6px;
+      border-radius: 2px;
+      color: var(--ink-muted);
+    }
+
+    .filter-tab.active .filter-tab-count {
+      background: var(--accent);
+      color: #1a1208;
+    }
+
+    /* Card grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 18px;
+    }
+
+    .review-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .review-card.approved {
+      border-color: rgba(111, 174, 95, 0.3);
+    }
+
+    .review-card.rejected {
+      border-color: rgba(214, 106, 92, 0.3);
+      opacity: 0.55;
+    }
+
+    .review-card.published {
+      border-color: rgba(107, 142, 174, 0.3);
+    }
+
+    .rc-head {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .rc-cat {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .rc-status {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .rc-status.pending {
+      background: rgba(201, 169, 97, 0.12);
+      color: var(--accent);
+    }
+
+    .rc-status.approved {
+      background: rgba(111, 174, 95, 0.12);
+      color: var(--green);
+    }
+
+    .rc-status.rejected {
+      background: rgba(214, 106, 92, 0.12);
+      color: var(--red);
+    }
+
+    .rc-status.published {
+      background: rgba(107, 142, 174, 0.12);
+      color: var(--blue);
+    }
+
+    .rc-body {
+      padding: 18px 20px;
+      flex: 1;
+    }
+
+    .rc-headline {
+      font-family: 'Fraunces', serif;
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1.15;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    .rc-headline em {
+      font-style: italic;
+      color: var(--accent);
+      font-weight: 400;
+    }
+
+    .rc-deck {
+      font-size: 13px;
+      color: var(--ink-dim);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+
+    .rc-section {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-bottom: 5px;
+    }
+
+    .rc-text {
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--ink);
+      margin-bottom: 14px;
+      font-weight: 300;
+    }
+
+    .rc-meaning {
+      background: var(--bg);
+      border-left: 2px solid var(--accent);
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      border-radius: 0 4px 4px 0;
+    }
+
+    .rc-meaning .rc-section {
+      color: var(--accent);
+    }
+
+    .rc-sources {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--ink-muted);
+    }
+
+    .rc-actions {
+      display: flex;
+      gap: 6px;
+      padding: 12px 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    /* Login card */
+    .login-page {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      background:
+        radial-gradient(ellipse at top, rgba(201, 169, 97, 0.06), transparent 50%),
+        var(--bg);
+    }
+
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 36px;
+      max-width: 420px;
+      width: 100%;
+    }
+
+    .login-brand {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 500;
+      font-size: 34px;
+      letter-spacing: -0.02em;
+      margin-bottom: 2px;
+    }
+
+    .login-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 28px;
+    }
+
+    .login-title {
+      font-family: 'Fraunces', serif;
+      font-size: 24px;
+      font-weight: 400;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .login-help {
+      font-size: 13px;
+      color: var(--ink-dim);
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 10px 13px;
+      color: var(--ink);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      transition: border 0.15s;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .field textarea {
+      min-height: 80px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .field-hint {
+      font-size: 11px;
+      color: var(--ink-muted);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+
+    .login-status {
+      margin-top: 14px;
+      font-size: 12px;
+      padding: 10px 12px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .login-status.show {
+      display: block;
+    }
+
+    .login-status.success {
+      background: rgba(111, 174, 95, 0.08);
+      color: var(--green);
+      border: 1px solid rgba(111, 174, 95, 0.25);
+    }
+
+    .login-status.error {
+      background: rgba(214, 106, 92, 0.08);
+      color: var(--red);
+      border: 1px solid rgba(214, 106, 92, 0.25);
+    }
+
+    /* Modal edición */
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .modal-bg.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      max-width: 720px;
+      width: 100%;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+
+    .modal-head {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      background: var(--bg-card);
+      z-index: 1;
+    }
+
+    .modal-title {
+      font-family: 'Fraunces', serif;
+      font-size: 22px;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+
+    .modal-title em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .modal-foot {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      position: sticky;
+      bottom: 0;
+      background: var(--bg-card);
+    }
+
+    .icon-btn {
+      width: 30px;
+      height: 30px;
+      background: transparent;
+      border: none;
+      color: var(--ink-dim);
+      font-size: 18px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .icon-btn:hover {
+      background: var(--bg-hover);
+      color: var(--ink);
+    }
+
+    /* Empty */
+    .empty {
+      padding: 80px 20px;
+      text-align: center;
+      grid-column: 1 / -1;
+    }
+
+    .empty-title {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-size: 24px;
+      color: var(--ink-dim);
+      margin-bottom: 10px;
+    }
+
+    .empty p {
+      color: var(--ink-muted);
+      font-size: 13px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 18px;
+      background: var(--ink);
+      color: #0a0a0a;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s;
+      z-index: 200;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Loading */
+    .loading {
+      padding: 60px;
+      text-align: center;
+      color: var(--ink-muted);
+      font-size: 13px;
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- ==================== LOGIN ==================== -->
-<div class="login-page" id="login-view">
-  <div class="login-card">
-    <div class="login-brand">lente<span class="brand-dot">.</span></div>
-    <div class="login-sub">Admin</div>
-    <h1 class="login-title">Acceso de redacción</h1>
-    <p class="login-help">Solo para editores. Puedes entrar con enlace mágico o con email + contraseña.</p>
-    <div class="field">
-      <label>Tu email</label>
-      <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" />
-    </div>
-    <div class="field">
-      <label>Contraseña (opcional)</label>
-      <input type="password" id="login-password" placeholder="Tu contraseña de Supabase" autocomplete="current-password" />
-      <div class="field-hint">Si no tienes contraseña, usa "Enviar enlace de acceso".</div>
-    </div>
-    <div style="display:flex; gap:10px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="sendMagicLink()">Enviar enlace de acceso</button>
-      <button class="btn" style="flex:1;" onclick="signInWithPassword()">Entrar con contraseña</button>
-    </div>
-    <div class="login-status" id="login-status"></div>
-  </div>
-</div>
-
-<!-- ==================== ADMIN APP ==================== -->
-<div class="app" id="admin-view" style="display:none;">
-
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="brand">lente<span class="brand-dot">.</span></div>
-    <div class="brand-sub">Admin · Redacción</div>
-
-    <div class="nav-section">
-      <div class="nav-title">Revisión</div>
-      <div class="nav-item active" data-status="pending">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Pendientes</span>
-        <span class="nav-badge" id="count-pending">0</span>
-      </div>
-      <div class="nav-item" data-status="approved">
-        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-        <span>Aprobadas</span>
-        <span class="nav-badge" id="count-approved">0</span>
-      </div>
-      <div class="nav-item" data-status="rejected">
-        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        <span>Rechazadas</span>
-        <span class="nav-badge" id="count-rejected">0</span>
-      </div>
-      <div class="nav-item" data-status="published">
-        <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
-        <span>Publicadas</span>
-        <span class="nav-badge" id="count-published">0</span>
-      </div>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-title">Acciones</div>
-      <a class="nav-item" onclick="triggerIngest()">
-        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-        <span>Disparar ingestión</span>
-      </a>
-      <a class="nav-item" onclick="triggerGenerate()">
-        <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 8L12 17l-6.5 4 2-8L2 9h7z"/></svg>
-        <span>Generar tarjetas</span>
-      </a>
-      <a class="nav-item" href="/" target="_blank">
-        <svg viewBox="0 0 24 24"><path d="M15 3h6v6M14 10l7-7M9 21H3v-6"/></svg>
-        <span>Ver app pública</span>
-      </a>
-    </div>
-
-    <div class="auth-box">
-      <div class="auth-box-label">Sesión</div>
-      <div class="auth-email" id="session-email">—</div>
-      <button class="auth-logout" onclick="logout()">Cerrar sesión</button>
-    </div>
-  </aside>
-
-  <!-- Main -->
-  <main class="main">
-    <div class="main-header">
-      <div>
-        <h1 class="main-title">Revisión <em>editorial</em></h1>
-        <p class="main-sub">Revisa, edita y aprueba las tarjetas generadas por el pipeline. Cuando tengas las del día listas, pulsa "Publicar aprobadas" para que aparezcan en la app.</p>
-      </div>
-      <div class="main-actions">
-        <button class="btn" onclick="loadCards()">
-          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-          Recargar
-        </button>
-        <button class="btn btn-primary" id="publish-btn" onclick="publishAll()">
-          <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
-          Publicar aprobadas
-        </button>
-      </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">Pendientes hoy</div>
-        <div class="stat-value" id="stat-pending">–</div>
-        <div class="stat-sub">Revisar antes de publicar</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Aprobadas</div>
-        <div class="stat-value" id="stat-approved">–</div>
-        <div class="stat-sub">Listas para publicar</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">En el feed</div>
-        <div class="stat-value" id="stat-published">–</div>
-        <div class="stat-sub">Visibles en la app</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Edición de</div>
-        <div class="stat-value" id="stat-date" style="font-size:18px;">—</div>
-        <div class="stat-sub">Fecha del feed actual</div>
-      </div>
-    </div>
-
-    <!-- Contenido -->
-    <div id="cards-container">
-      <div class="loading">Cargando tarjetas...</div>
-    </div>
-  </main>
-</div>
-
-<!-- Modal edición -->
-<div class="modal-bg" id="edit-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <div class="modal-title">Editar <em>tarjeta</em></div>
-      <button class="icon-btn" onclick="closeEdit()">✕</button>
-    </div>
-    <div class="modal-body">
+  <!-- ==================== LOGIN ==================== -->
+  <div class="login-page" id="login-view">
+    <div class="login-card">
+      <div class="login-brand">lente<span class="brand-dot">.</span></div>
+      <div class="login-sub">Admin</div>
+      <h1 class="login-title">Acceso de redacción</h1>
+      <p class="login-help">Solo para editores. Puedes entrar con enlace mágico o con email + contraseña.</p>
       <div class="field">
-        <label>Categoría</label>
-        <select id="edit-category">
-          <option>Política monetaria</option>
-          <option>Materias primas</option>
-          <option>Macro Europa</option>
-          <option>Macro</option>
-          <option>Bolsa</option>
-          <option>Cripto</option>
-          <option>Energía</option>
-          <option>España</option>
-          <option>Tech</option>
-          <option>Geopolítica</option>
-        </select>
+        <label>Tu email</label>
+        <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" />
       </div>
       <div class="field">
-        <label>Titular</label>
-        <input type="text" id="edit-headline" />
-        <div class="field-hint">Máx 12 palabras. Rodea palabras con &lt;em&gt;así&lt;/em&gt; para ponerlas en cursiva dorada.</div>
+        <label>Contraseña (opcional)</label>
+        <input type="password" id="login-password" placeholder="Tu contraseña de Supabase"
+          autocomplete="current-password" />
+        <div class="field-hint">Si no tienes contraseña, usa "Enviar enlace de acceso".</div>
       </div>
-      <div class="field">
-        <label>Deck (resumen de 1-2 líneas)</label>
-        <textarea id="edit-deck"></textarea>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="sendMagicLink()">Enviar enlace de acceso</button>
+        <button class="btn" style="flex:1;" onclick="signInWithPassword()">Entrar con contraseña</button>
       </div>
-      <div class="field">
-        <label>Cuerpo (Qué ha pasado)</label>
-        <textarea id="edit-body" style="min-height:130px;"></textarea>
-        <div class="field-hint">Máx 80 palabras. Sin jerga sin explicar.</div>
-      </div>
-      <div class="field">
-        <label>¿Qué significa para ti?</label>
-        <textarea id="edit-meaning"></textarea>
-        <div class="field-hint">Máx 60 palabras. Conecta con hipoteca/ahorro/inversión en España.</div>
-      </div>
-      <div class="field">
-        <label>Fuentes</label>
-        <input type="text" id="edit-sources" />
-        <div class="field-hint">Formato: "Reuters · FT · Bloomberg"</div>
-      </div>
-      <div class="field">
-        <label>Segundos de lectura</label>
-        <input type="number" id="edit-read-time" min="20" max="120" />
-      </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeEdit()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveEdit()">Guardar cambios</button>
+      <div class="login-status" id="login-status"></div>
     </div>
   </div>
-</div>
 
-<div class="toast" id="toast"></div>
+  <!-- ==================== ADMIN APP ==================== -->
+  <div class="app" id="admin-view" style="display:none;">
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
-<script src="/config.js"></script>
-<script>
-/* ============================================================
-   lente Admin · Revisión editorial
-   Conecta con Supabase + /api/admin/cards
-   ============================================================ */
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">lente<span class="brand-dot">.</span></div>
+      <div class="brand-sub">Admin · Redacción</div>
 
-let supabaseClient = null;
+      <div class="nav-section">
+        <div class="nav-title">Revisión</div>
+        <div class="nav-item active" data-status="pending">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span>Pendientes</span>
+          <span class="nav-badge" id="count-pending">0</span>
+        </div>
+        <div class="nav-item" data-status="approved">
+          <svg viewBox="0 0 24 24">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span>Aprobadas</span>
+          <span class="nav-badge" id="count-approved">0</span>
+        </div>
+        <div class="nav-item" data-status="rejected">
+          <svg viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+          <span>Rechazadas</span>
+          <span class="nav-badge" id="count-rejected">0</span>
+        </div>
+        <div class="nav-item" data-status="published">
+          <svg viewBox="0 0 24 24">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
+          </svg>
+          <span>Publicadas</span>
+          <span class="nav-badge" id="count-published">0</span>
+        </div>
+      </div>
 
-function getSupabaseClient() {
-  if (supabaseClient) return supabaseClient;
-  if (!window.LENTE_CONFIG) throw new Error('Falta window.LENTE_CONFIG (config.js no cargado)');
-  if (!window.supabase?.createClient) throw new Error('SDK de Supabase no cargado');
-  const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LENTE_CONFIG;
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  return supabaseClient;
-}
+      <div class="nav-section">
+        <div class="nav-title">Acciones</div>
+        <a class="nav-item" onclick="triggerIngest()">
+          <svg viewBox="0 0 24 24">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+          </svg>
+          <span>Disparar ingestión</span>
+        </a>
+        <a class="nav-item" onclick="clearClientCache()">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+          <span>Actualizar clientes</span>
+        </a>
+        <a class="nav-item" onclick="triggerGenerate()">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2l3 7h7l-5.5 4 2 8L12 17l-6.5 4 2-8L2 9h7z" />
+          </svg>
+          <span>Generar tarjetas</span>
+        </a>
+        <a class="nav-item" href="/" target="_blank">
+          <svg viewBox="0 0 24 24">
+            <path d="M15 3h6v6M14 10l7-7M9 21H3v-6" />
+          </svg>
+          <span>Ver app pública</span>
+        </a>
+      </div>
 
-const state = {
-  session: null,
-  isAdmin: false,
-  cards: [],
-  currentStatus: 'pending',
-  editingId: null,
-};
+      <div class="auth-box">
+        <div class="auth-box-label">Sesión</div>
+        <div class="auth-email" id="session-email">—</div>
+        <button class="auth-logout" onclick="logout()">Cerrar sesión</button>
+      </div>
+    </aside>
 
-const $ = (id) => document.getElementById(id);
+    <!-- Main -->
+    <main class="main">
+      <div class="main-header">
+        <div>
+          <h1 class="main-title">Revisión <em>editorial</em></h1>
+          <p class="main-sub">Revisa, edita y aprueba las tarjetas generadas por el pipeline. Cuando tengas las del día
+            listas, pulsa "Publicar aprobadas" para que aparezcan en la app.</p>
+        </div>
+        <div class="main-actions">
+          <button class="btn" onclick="loadCards()">
+            <svg viewBox="0 0 24 24">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+            </svg>
+            Recargar
+          </button>
+          <button class="btn btn-primary" id="publish-btn" onclick="publishAll()">
+            <svg viewBox="0 0 24 24">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
+            </svg>
+            Publicar aprobadas
+          </button>
+        </div>
+      </div>
 
-function toast(msg, ms = 2200) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), ms);
-}
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Pendientes hoy</div>
+          <div class="stat-value" id="stat-pending">–</div>
+          <div class="stat-sub">Revisar antes de publicar</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Aprobadas</div>
+          <div class="stat-value" id="stat-approved">–</div>
+          <div class="stat-sub">Listas para publicar</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">En el feed</div>
+          <div class="stat-value" id="stat-published">–</div>
+          <div class="stat-sub">Visibles en la app</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Edición de</div>
+          <div class="stat-value" id="stat-date" style="font-size:18px;">—</div>
+          <div class="stat-sub">Fecha del feed actual</div>
+        </div>
+      </div>
 
-// ============ AUTH ============
+      <!-- Contenido -->
+      <div id="cards-container">
+        <div class="loading">Cargando tarjetas...</div>
+      </div>
+    </main>
+  </div>
 
-async function checkSession() {
-  const client = getSupabaseClient();
-  const { data: { session } } = await client.auth.getSession();
-  state.session = session;
+  <!-- Modal edición -->
+  <div class="modal-bg" id="edit-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">Editar <em>tarjeta</em></div>
+        <button class="icon-btn" onclick="closeEdit()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Categoría</label>
+          <select id="edit-category">
+            <option>Política monetaria</option>
+            <option>Materias primas</option>
+            <option>Macro Europa</option>
+            <option>Macro</option>
+            <option>Bolsa</option>
+            <option>Cripto</option>
+            <option>Energía</option>
+            <option>España</option>
+            <option>Tech</option>
+            <option>Geopolítica</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Titular</label>
+          <input type="text" id="edit-headline" />
+          <div class="field-hint">Máx 12 palabras. Rodea palabras con &lt;em&gt;así&lt;/em&gt; para ponerlas en cursiva
+            dorada.</div>
+        </div>
+        <div class="field">
+          <label>Deck (resumen de 1-2 líneas)</label>
+          <textarea id="edit-deck"></textarea>
+        </div>
+        <div class="field">
+          <label>Cuerpo (Qué ha pasado)</label>
+          <textarea id="edit-body" style="min-height:130px;"></textarea>
+          <div class="field-hint">Máx 80 palabras. Sin jerga sin explicar.</div>
+        </div>
+        <div class="field">
+          <label>¿Qué significa para ti?</label>
+          <textarea id="edit-meaning"></textarea>
+          <div class="field-hint">Máx 60 palabras. Conecta con hipoteca/ahorro/inversión en España.</div>
+        </div>
+        <div class="field">
+          <label>Fuentes</label>
+          <input type="text" id="edit-sources" />
+          <div class="field-hint">Formato: "Reuters · FT · Bloomberg"</div>
+        </div>
+        <div class="field">
+          <label>Segundos de lectura</label>
+          <input type="number" id="edit-read-time" min="20" max="120" />
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeEdit()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEdit()">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
 
-  if (!session) {
-    $('login-view').style.display = 'flex';
-    $('admin-view').style.display = 'none';
-    return false;
-  }
+  <div class="toast" id="toast"></div>
 
-  // Verificar que es admin
-  const { data: profile } = await client
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', session.user.id)
-    .single();
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+  <script src="/config.js"></script>
+  <script>
+    /* ============================================================
+       lente Admin · Revisión editorial
+       Conecta con Supabase + /api/admin/cards
+       ============================================================ */
 
-  state.isAdmin = !!profile?.is_admin;
+    let supabaseClient = null;
 
-  if (!state.isAdmin) {
-    $('login-view').style.display = 'flex';
-    $('admin-view').style.display = 'none';
-    const status = $('login-status');
-    status.className = 'login-status show error';
-    status.textContent = 'Tu usuario no tiene permisos de admin. Contacta con el administrador para activarlos en la base de datos (tabla profiles, campo is_admin).';
-    return false;
-  }
+    function getSupabaseClient() {
+      if (supabaseClient) return supabaseClient;
+      if (!window.LENTE_CONFIG) throw new Error('Falta window.LENTE_CONFIG (config.js no cargado)');
+      if (!window.supabase?.createClient) throw new Error('SDK de Supabase no cargado');
+      const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LENTE_CONFIG;
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      return supabaseClient;
+    }
 
-  $('login-view').style.display = 'none';
-  $('admin-view').style.display = 'grid';
-  $('session-email').textContent = session.user.email;
-  return true;
-}
+    const state = {
+      session: null,
+      isAdmin: false,
+      cards: [],
+      currentStatus: 'pending',
+      editingId: null,
+    };
 
-async function sendMagicLink() {
-  const client = getSupabaseClient();
-  const email = $('login-email').value.trim();
-  const status = $('login-status');
+    const $ = (id) => document.getElementById(id);
 
-  if (!email.includes('@')) {
-    status.className = 'login-status show error';
-    status.textContent = 'Email no válido';
-    return;
-  }
+    function toast(msg, ms = 2200) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), ms);
+    }
 
-  status.className = 'login-status show';
-  status.textContent = 'Enviando enlace...';
+    // ============ AUTH ============
 
-  const adminRedirectUrl = `${location.origin}/admin`;
-  const { error } = await client.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: adminRedirectUrl },
-  });
+    async function checkSession() {
+      const client = getSupabaseClient();
+      const { data: { session } } = await client.auth.getSession();
+      state.session = session;
 
-  if (error) {
-    status.className = 'login-status show error';
-    status.textContent = error.message;
-  } else {
-    status.className = 'login-status show success';
-    status.textContent = `Enlace enviado a ${email}. Revisa tu bandeja (y spam). Al hacer clic volverás aquí conectado.`;
-  }
-}
+      if (!session) {
+        $('login-view').style.display = 'flex';
+        $('admin-view').style.display = 'none';
+        return false;
+      }
 
-async function signInWithPassword() {
-  const client = getSupabaseClient();
-  const email = $('login-email').value.trim();
-  const password = $('login-password').value;
-  const status = $('login-status');
+      // Verificar que es admin
+      const { data: profile } = await client
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .single();
 
-  if (!email.includes('@')) {
-    status.className = 'login-status show error';
-    status.textContent = 'Email no válido';
-    return;
-  }
-  if (!password || password.length < 6) {
-    status.className = 'login-status show error';
-    status.textContent = 'Introduce una contraseña válida';
-    return;
-  }
+      state.isAdmin = !!profile?.is_admin;
 
-  status.className = 'login-status show';
-  status.textContent = 'Iniciando sesión...';
+      if (!state.isAdmin) {
+        $('login-view').style.display = 'flex';
+        $('admin-view').style.display = 'none';
+        const status = $('login-status');
+        status.className = 'login-status show error';
+        status.textContent = 'Tu usuario no tiene permisos de admin. Contacta con el administrador para activarlos en la base de datos (tabla profiles, campo is_admin).';
+        return false;
+      }
 
-  const { error } = await client.auth.signInWithPassword({ email, password });
-  if (error) {
-    status.className = 'login-status show error';
-    status.textContent = error.message;
-    return;
-  }
+      $('login-view').style.display = 'none';
+      $('admin-view').style.display = 'grid';
+      $('session-email').textContent = session.user.email;
+      return true;
+    }
 
-  status.className = 'login-status show success';
-  status.textContent = 'Sesión iniciada. Verificando permisos de admin...';
-  await checkSession();
-}
+    async function sendMagicLink() {
+      const client = getSupabaseClient();
+      const email = $('login-email').value.trim();
+      const status = $('login-status');
 
-async function logout() {
-  const client = getSupabaseClient();
-  await client.auth.signOut();
-  location.reload();
-}
+      if (!email.includes('@')) {
+        status.className = 'login-status show error';
+        status.textContent = 'Email no válido';
+        return;
+      }
 
-function initAuthListeners() {
-  try {
-    const client = getSupabaseClient();
-    client.auth.onAuthStateChange(() => {
-      checkSession().then(ok => {
-        if (ok) loadCards();
+      status.className = 'login-status show';
+      status.textContent = 'Enviando enlace...';
+
+      const adminRedirectUrl = `${location.origin}/admin`;
+      const { error } = await client.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: adminRedirectUrl },
       });
-    });
-  } catch (err) {
-    const status = $('login-status');
-    status.className = 'login-status show error';
-    status.textContent = err.message;
-  }
-}
 
-// ============ API ============
+      if (error) {
+        status.className = 'login-status show error';
+        status.textContent = error.message;
+      } else {
+        status.className = 'login-status show success';
+        status.textContent = `Enlace enviado a ${email}. Revisa tu bandeja (y spam). Al hacer clic volverás aquí conectado.`;
+      }
+    }
 
-async function apiCall(method, body = null) {
-  const token = state.session?.access_token;
-  const res = await fetch('/api/admin/cards', {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Error ${res.status}`);
-  }
-  return res.json();
-}
+    async function signInWithPassword() {
+      const client = getSupabaseClient();
+      const email = $('login-email').value.trim();
+      const password = $('login-password').value;
+      const status = $('login-status');
 
-// ============ CARGA DE TARJETAS ============
+      if (!email.includes('@')) {
+        status.className = 'login-status show error';
+        status.textContent = 'Email no válido';
+        return;
+      }
+      if (!password || password.length < 6) {
+        status.className = 'login-status show error';
+        status.textContent = 'Introduce una contraseña válida';
+        return;
+      }
 
-async function loadCards() {
-  $('cards-container').innerHTML = '<div class="loading">Cargando tarjetas...</div>';
+      status.className = 'login-status show';
+      status.textContent = 'Iniciando sesión...';
 
-  try {
-    // Cargamos todas las tarjetas recientes para calcular contadores
-    const token = state.session.access_token;
-    const res = await fetch('/api/admin/cards?limit=200', {
-      headers: { 'Authorization': `Bearer ${token}` },
-    });
-    const data = await res.json();
-    state.cards = data.cards || [];
+      const { error } = await client.auth.signInWithPassword({ email, password });
+      if (error) {
+        status.className = 'login-status show error';
+        status.textContent = error.message;
+        return;
+      }
 
-    updateCounts();
-    renderCards();
-  } catch (err) {
-    $('cards-container').innerHTML = `
+      status.className = 'login-status show success';
+      status.textContent = 'Sesión iniciada. Verificando permisos de admin...';
+      await checkSession();
+    }
+
+    async function logout() {
+      const client = getSupabaseClient();
+      await client.auth.signOut();
+      location.reload();
+    }
+
+    function initAuthListeners() {
+      try {
+        const client = getSupabaseClient();
+        client.auth.onAuthStateChange(() => {
+          checkSession().then(ok => {
+            if (ok) loadCards();
+          });
+        });
+      } catch (err) {
+        const status = $('login-status');
+        status.className = 'login-status show error';
+        status.textContent = err.message;
+      }
+    }
+
+    // ============ API ============
+
+    async function apiCall(method, body = null) {
+      const token = state.session?.access_token;
+      const res = await fetch('/api/admin/cards', {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Error ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // ============ CARGA DE TARJETAS ============
+
+    async function loadCards() {
+      $('cards-container').innerHTML = '<div class="loading">Cargando tarjetas...</div>';
+
+      try {
+        // Cargamos todas las tarjetas recientes para calcular contadores
+        const token = state.session.access_token;
+        const res = await fetch('/api/admin/cards?limit=200', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await res.json();
+        state.cards = data.cards || [];
+
+        updateCounts();
+        renderCards();
+      } catch (err) {
+        $('cards-container').innerHTML = `
       <div class="empty">
         <div class="empty-title">Error cargando tarjetas</div>
         <p>${err.message}</p>
       </div>
     `;
-  }
-}
+      }
+    }
 
-function updateCounts() {
-  const counts = { pending: 0, approved: 0, rejected: 0, published: 0 };
-  for (const c of state.cards) {
-    counts[c.status] = (counts[c.status] || 0) + 1;
-  }
-  $('count-pending').textContent = counts.pending;
-  $('count-approved').textContent = counts.approved;
-  $('count-rejected').textContent = counts.rejected;
-  $('count-published').textContent = counts.published;
+    function updateCounts() {
+      const counts = { pending: 0, approved: 0, rejected: 0, published: 0 };
+      for (const c of state.cards) {
+        counts[c.status] = (counts[c.status] || 0) + 1;
+      }
+      $('count-pending').textContent = counts.pending;
+      $('count-approved').textContent = counts.approved;
+      $('count-rejected').textContent = counts.rejected;
+      $('count-published').textContent = counts.published;
 
-  $('stat-pending').textContent = counts.pending;
-  $('stat-approved').textContent = counts.approved;
-  $('stat-published').textContent = counts.published;
+      $('stat-pending').textContent = counts.pending;
+      $('stat-approved').textContent = counts.approved;
+      $('stat-published').textContent = counts.published;
 
-  // Fecha de la edición actual
-  const latestDate = state.cards
-    .map(c => c.edition_date)
-    .filter(Boolean)
-    .sort()
-    .reverse()[0];
-  if (latestDate) {
-    const d = new Date(latestDate);
-    $('stat-date').textContent = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-  }
-}
+      // Fecha de la edición actual
+      const latestDate = state.cards
+        .map(c => c.edition_date)
+        .filter(Boolean)
+        .sort()
+        .reverse()[0];
+      if (latestDate) {
+        const d = new Date(latestDate);
+        $('stat-date').textContent = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      }
+    }
 
-function renderCards() {
-  const container = $('cards-container');
-  const filtered = state.cards.filter(c => c.status === state.currentStatus);
+    function renderCards() {
+      const container = $('cards-container');
+      const filtered = state.cards.filter(c => c.status === state.currentStatus);
 
-  if (filtered.length === 0) {
-    const msg = {
-      pending: 'Sin tarjetas pendientes. Pulsa "Generar tarjetas" para que el pipeline produzca nuevas.',
-      approved: 'Sin aprobadas. Revisa las pendientes y apruébalas para que aparezcan aquí.',
-      rejected: 'Sin rechazadas.',
-      published: 'Sin publicadas todavía.',
-    }[state.currentStatus];
+      if (filtered.length === 0) {
+        const msg = {
+          pending: 'Sin tarjetas pendientes. Pulsa "Generar tarjetas" para que el pipeline produzca nuevas.',
+          approved: 'Sin aprobadas. Revisa las pendientes y apruébalas para que aparezcan aquí.',
+          rejected: 'Sin rechazadas.',
+          published: 'Sin publicadas todavía.',
+        }[state.currentStatus];
 
-    container.innerHTML = `
+        container.innerHTML = `
       <div class="empty">
         <div class="empty-title">${state.currentStatus.charAt(0).toUpperCase() + state.currentStatus.slice(1)} · vacío</div>
         <p>${msg}</p>
       </div>
     `;
-    return;
-  }
+        return;
+      }
 
-  const html = '<div class="cards-grid">' + filtered.map(c => `
+      const html = '<div class="cards-grid">' + filtered.map(c => `
     <div class="review-card ${c.status}">
       <div class="rc-head">
         <span class="rc-cat">${escapeHTML(c.category)}</span>
@@ -1071,169 +1309,186 @@ function renderCards() {
     </div>
   `).join('') + '</div>';
 
-  container.innerHTML = html;
-}
+      container.innerHTML = html;
+    }
 
-function statusLabel(s) {
-  return {
-    pending: '○ Pendiente',
-    approved: '✓ Aprobada',
-    rejected: '✕ Rechazada',
-    published: '▲ Publicada',
-  }[s] || s;
-}
+    function statusLabel(s) {
+      return {
+        pending: '○ Pendiente',
+        approved: '✓ Aprobada',
+        rejected: '✕ Rechazada',
+        published: '▲ Publicada',
+      }[s] || s;
+    }
 
-function escapeHTML(s) {
-  if (!s) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // Pero permitimos <em></em> porque viene del modelo
-    .replace(/&lt;em&gt;/g, '<em>')
-    .replace(/&lt;\/em&gt;/g, '</em>');
-}
+    function escapeHTML(s) {
+      if (!s) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        // Pero permitimos <em></em> porque viene del modelo
+        .replace(/&lt;em&gt;/g, '<em>')
+        .replace(/&lt;\/em&gt;/g, '</em>');
+    }
 
-// ============ ACCIONES ============
+    // ============ ACCIONES ============
 
-async function act(id, action) {
-  try {
-    await apiCall('POST', { action, id });
-    toast(action === 'approve' ? 'Aprobada ✓' : 'Rechazada ✕');
-    await loadCards();
-  } catch (err) {
-    toast('Error: ' + err.message);
-  }
-}
+    async function act(id, action) {
+      try {
+        await apiCall('POST', { action, id });
+        toast(action === 'approve' ? 'Aprobada ✓' : 'Rechazada ✕');
+        await loadCards();
+      } catch (err) {
+        toast('Error: ' + err.message);
+      }
+    }
 
-async function publishAll() {
-  const approved = state.cards.filter(c => c.status === 'approved').length;
-  if (approved === 0) {
-    toast('No hay tarjetas aprobadas');
-    return;
-  }
-  if (!confirm(`¿Publicar las ${approved} tarjetas aprobadas al feed público? Serán visibles para todos los usuarios de inmediato.`)) {
-    return;
-  }
-  try {
-    await apiCall('POST', { action: 'publish_all' });
-    toast(`${approved} tarjetas publicadas al feed`);
-    await loadCards();
-  } catch (err) {
-    toast('Error: ' + err.message);
-  }
-}
+    async function publishAll() {
+      const approved = state.cards.filter(c => c.status === 'approved').length;
+      if (approved === 0) {
+        toast('No hay tarjetas aprobadas');
+        return;
+      }
+      if (!confirm(`¿Publicar las ${approved} tarjetas aprobadas al feed público? Serán visibles para todos los usuarios de inmediato.`)) {
+        return;
+      }
+      try {
+        await apiCall('POST', { action: 'publish_all' });
+        toast(`${approved} tarjetas publicadas al feed`);
+        await loadCards();
+      } catch (err) {
+        toast('Error: ' + err.message);
+      }
+    }
 
-// ============ EDICIÓN ============
+    // ============ EDICIÓN ============
 
-function edit(id) {
-  const card = state.cards.find(c => c.id === id);
-  if (!card) return;
-  state.editingId = id;
-  $('edit-category').value = card.category;
-  $('edit-headline').value = card.headline || '';
-  $('edit-deck').value = card.deck || '';
-  $('edit-body').value = card.body || '';
-  $('edit-meaning').value = card.meaning || '';
-  $('edit-sources').value = card.sources_text || '';
-  $('edit-read-time').value = card.read_time_seconds || 40;
-  $('edit-modal').classList.add('open');
-}
+    function edit(id) {
+      const card = state.cards.find(c => c.id === id);
+      if (!card) return;
+      state.editingId = id;
+      $('edit-category').value = card.category;
+      $('edit-headline').value = card.headline || '';
+      $('edit-deck').value = card.deck || '';
+      $('edit-body').value = card.body || '';
+      $('edit-meaning').value = card.meaning || '';
+      $('edit-sources').value = card.sources_text || '';
+      $('edit-read-time').value = card.read_time_seconds || 40;
+      $('edit-modal').classList.add('open');
+    }
 
-function closeEdit() {
-  $('edit-modal').classList.remove('open');
-  state.editingId = null;
-}
+    function closeEdit() {
+      $('edit-modal').classList.remove('open');
+      state.editingId = null;
+    }
 
-async function saveEdit() {
-  if (!state.editingId) return;
-  try {
-    await apiCall('POST', {
-      action: 'update',
-      id: state.editingId,
-      updates: {
-        category: $('edit-category').value,
-        headline: $('edit-headline').value,
-        deck: $('edit-deck').value,
-        body: $('edit-body').value,
-        meaning: $('edit-meaning').value,
-        sources_text: $('edit-sources').value,
-        read_time_seconds: parseInt($('edit-read-time').value) || 40,
-      },
-    });
-    closeEdit();
-    toast('Cambios guardados');
-    await loadCards();
-  } catch (err) {
-    toast('Error: ' + err.message);
-  }
-}
+    async function saveEdit() {
+      if (!state.editingId) return;
+      try {
+        await apiCall('POST', {
+          action: 'update',
+          id: state.editingId,
+          updates: {
+            category: $('edit-category').value,
+            headline: $('edit-headline').value,
+            deck: $('edit-deck').value,
+            body: $('edit-body').value,
+            meaning: $('edit-meaning').value,
+            sources_text: $('edit-sources').value,
+            read_time_seconds: parseInt($('edit-read-time').value) || 40,
+          },
+        });
+        closeEdit();
+        toast('Cambios guardados');
+        await loadCards();
+      } catch (err) {
+        toast('Error: ' + err.message);
+      }
+    }
 
-// ============ CRON TRIGGERS ============
-
-async function triggerIngest() {
-  if (!confirm('¿Ejecutar ingestión RSS ahora? Esto traerá noticias nuevas y después generará tarjetas automáticamente (tarda 1-3 min).')) return;
-  toast('Disparando ingestión...');
+    async function clearClientCache() {
+  if (!confirm('¿Forzar actualización en todos los dispositivos conectados?')) return;
+  toast('Enviando señal de actualización...');
   try {
     const token = state.session.access_token;
-    const res = await fetch('/api/admin/trigger-ingest', {
+    const res = await fetch('/api/admin/clear-cache', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(await res.text());
-    toast('Ingestión iniciada. Revisa "Pendientes" en 1-3 min.');
+    toast('Señal enviada ✓ — los clientes actualizarán al cargar');
   } catch (err) {
     toast('Error: ' + err.message);
   }
 }
 
-async function triggerGenerate() {
-  if (!confirm('¿Generar tarjetas ahora con las noticias ya ingresadas?')) return;
-  toast('Generando tarjetas...');
-  try {
-    const token = state.session.access_token;
-    const res = await fetch('/api/admin/trigger-generate', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+    // ============ CRON TRIGGERS ============
+
+    async function triggerIngest() {
+      if (!confirm('¿Ejecutar ingestión RSS ahora? Esto traerá noticias nuevas y después generará tarjetas automáticamente (tarda 1-3 min).')) return;
+      toast('Disparando ingestión...');
+      try {
+        const token = state.session.access_token;
+        const res = await fetch('/api/admin/trigger-ingest', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        toast('Ingestión iniciada. Revisa "Pendientes" en 1-3 min.');
+      } catch (err) {
+        toast('Error: ' + err.message);
+      }
+    }
+
+    async function triggerGenerate() {
+      if (!confirm('¿Generar tarjetas ahora con las noticias ya ingresadas?')) return;
+      toast('Generando tarjetas...');
+      try {
+        const token = state.session.access_token;
+        const res = await fetch('/api/admin/trigger-generate', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        toast('Generación iniciada');
+        setTimeout(loadCards, 30000);  // recarga en 30s
+      } catch (err) {
+        toast('Error: ' + err.message);
+      }
+    }
+
+    // ============ NAV ============
+
+    document.querySelectorAll('.nav-item[data-status]').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        item.classList.add('active');
+        state.currentStatus = item.dataset.status;
+        renderCards();
+      });
     });
-    if (!res.ok) throw new Error(await res.text());
-    toast('Generación iniciada');
-    setTimeout(loadCards, 30000);  // recarga en 30s
-  } catch (err) {
-    toast('Error: ' + err.message);
-  }
-}
 
-// ============ NAV ============
+    // ============ INIT ============
 
-document.querySelectorAll('.nav-item[data-status]').forEach(item => {
-  item.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    item.classList.add('active');
-    state.currentStatus = item.dataset.status;
-    renderCards();
-  });
-});
-
-// ============ INIT ============
-
-(async () => {
-  window.sendMagicLink = sendMagicLink;
-  window.signInWithPassword = signInWithPassword;
-  window.logout = logout;
-  window.triggerIngest = triggerIngest;
-  window.triggerGenerate = triggerGenerate;
-  window.closeEdit = closeEdit;
-  window.saveEdit = saveEdit;
-  window.edit = edit;
-  window.act = act;
-  window.publishAll = publishAll;
-  window.loadCards = loadCards;
-  initAuthListeners();
-  const ok = await checkSession();
-  if (ok) await loadCards();
-})();
-</script>
+    (async () => {
+      window.sendMagicLink = sendMagicLink;
+      window.signInWithPassword = signInWithPassword;
+      window.logout = logout;
+      window.triggerIngest = triggerIngest;
+      window.triggerGenerate = triggerGenerate;
+      window.closeEdit = closeEdit;
+      window.saveEdit = saveEdit;
+      window.edit = edit;
+      window.act = act;
+      window.publishAll = publishAll;
+      window.loadCards = loadCards;
+      initAuthListeners();
+      const ok = await checkSession();
+      if (ok) await loadCards();
+    })();
+  </script>
 
 </body>
+
 </html>
