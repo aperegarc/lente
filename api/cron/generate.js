@@ -61,6 +61,28 @@ function buildKeywordClusters(articles) {
   }));
 }
 
+function buildFallbackCard(cluster, topic) {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const titles = cluster.articles.map(a => clean(a.title)).filter(Boolean);
+  const headlineBase = titles[0] || `Resumen de ${topic}`;
+  const headline = `${headlineBase.slice(0, 90)}`;
+  const sources = [...new Set(cluster.articles.map(a => a.source_name).filter(Boolean))];
+  const snippetLines = cluster.articles
+    .slice(0, 3)
+    .map(a => clean(a.snippet))
+    .filter(Boolean);
+
+  return {
+    category: topic,
+    headline: headline.length > 12 ? `${headline.split(' ').slice(0, 12).join(' ')}` : headline,
+    deck: `Resumen rápido de ${cluster.articles.length} noticias relacionadas en ${topic.toLowerCase()}.`,
+    body: snippetLines.join(' ').slice(0, 460) || 'Se han agrupado varias noticias del mismo tema para revisión editorial.',
+    meaning: 'Impacta en expectativas de tipos, inflación y decisiones de ahorro e inversión en España.',
+    read_time_seconds: 40,
+    sources_text: sources.slice(0, 3).join(' · ') || 'Fuentes múltiples',
+  };
+}
+
 // ============================================================
 // UTILIDADES
 // ============================================================
@@ -272,6 +294,7 @@ export default async function handler(req, res) {
       .join('\n\n');
 
     try {
+      let card = null;
       const response = await claude.messages.create({
         model: ANTHROPIC_MODEL,
         max_tokens: 1500,
@@ -285,7 +308,7 @@ export default async function handler(req, res) {
       const text = response.content[0].text.trim();
       // Limpiar por si Claude mete backticks
       const jsonText = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
-      const card = JSON.parse(jsonText);
+      card = JSON.parse(jsonText);
 
       // Guardar tarjeta en BD
       const { data: saved } = await supabase
@@ -312,6 +335,33 @@ export default async function handler(req, res) {
       }
     } catch (err) {
       console.error('[generate] ✗ Error Claude:', err.message);
+      try {
+        const fallbackCard = buildFallbackCard(cluster, topic);
+        const { data: savedFallback } = await supabase
+          .from('cards')
+          .insert({
+            cluster_id: savedCluster.id,
+            category: fallbackCard.category,
+            headline: fallbackCard.headline,
+            deck: fallbackCard.deck,
+            body: fallbackCard.body,
+            meaning: fallbackCard.meaning,
+            sources_text: fallbackCard.sources_text,
+            read_time_seconds: fallbackCard.read_time_seconds,
+            status: 'pending',
+            edition_date: today,
+            order_index: generatedCards.length,
+          })
+          .select()
+          .single();
+
+        if (savedFallback) {
+          generatedCards.push(savedFallback);
+          console.log(`[generate] ✓ Tarjeta fallback creada para topic ${topic}`);
+        }
+      } catch (fallbackErr) {
+        console.error('[generate] ✗ Error fallback card:', fallbackErr.message);
+      }
     }
   }
 
