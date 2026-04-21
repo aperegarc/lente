@@ -602,12 +602,20 @@
     <div class="login-brand">lente<span class="brand-dot">.</span></div>
     <div class="login-sub">Admin</div>
     <h1 class="login-title">Acceso de redacción</h1>
-    <p class="login-help">Solo para editores. Recibirás un enlace mágico al email — sin contraseñas.</p>
+    <p class="login-help">Solo para editores. Puedes entrar con enlace mágico o con email + contraseña.</p>
     <div class="field">
       <label>Tu email</label>
       <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" />
     </div>
-    <button class="btn btn-primary" style="width:100%;" onclick="sendMagicLink()">Enviar enlace de acceso</button>
+    <div class="field">
+      <label>Contraseña (opcional)</label>
+      <input type="password" id="login-password" placeholder="Tu contraseña de Supabase" autocomplete="current-password" />
+      <div class="field-hint">Si no tienes contraseña, usa "Enviar enlace de acceso".</div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="sendMagicLink()">Enviar enlace de acceso</button>
+      <button class="btn" style="flex:1;" onclick="signInWithPassword()">Entrar con contraseña</button>
+    </div>
     <div class="login-status" id="login-status"></div>
   </div>
 </div>
@@ -865,9 +873,10 @@ async function sendMagicLink() {
   status.className = 'login-status show';
   status.textContent = 'Enviando enlace...';
 
+  const adminRedirectUrl = `${location.origin}/admin`;
   const { error } = await client.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: location.href },
+    options: { emailRedirectTo: adminRedirectUrl },
   });
 
   if (error) {
@@ -877,6 +886,38 @@ async function sendMagicLink() {
     status.className = 'login-status show success';
     status.textContent = `Enlace enviado a ${email}. Revisa tu bandeja (y spam). Al hacer clic volverás aquí conectado.`;
   }
+}
+
+async function signInWithPassword() {
+  const client = getSupabaseClient();
+  const email = $('login-email').value.trim();
+  const password = $('login-password').value;
+  const status = $('login-status');
+
+  if (!email.includes('@')) {
+    status.className = 'login-status show error';
+    status.textContent = 'Email no válido';
+    return;
+  }
+  if (!password || password.length < 6) {
+    status.className = 'login-status show error';
+    status.textContent = 'Introduce una contraseña válida';
+    return;
+  }
+
+  status.className = 'login-status show';
+  status.textContent = 'Iniciando sesión...';
+
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) {
+    status.className = 'login-status show error';
+    status.textContent = error.message;
+    return;
+  }
+
+  status.className = 'login-status show success';
+  status.textContent = 'Sesión iniciada. Verificando permisos de admin...';
+  await checkSession();
 }
 
 async function logout() {
@@ -1178,6 +1219,7 @@ document.querySelectorAll('.nav-item[data-status]').forEach(item => {
 
 (async () => {
   window.sendMagicLink = sendMagicLink;
+  window.signInWithPassword = signInWithPassword;
   window.logout = logout;
   window.triggerIngest = triggerIngest;
   window.triggerGenerate = triggerGenerate;

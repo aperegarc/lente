@@ -14,8 +14,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest';
 
 // ============================================================
@@ -130,6 +128,8 @@ export default async function handler(req, res) {
         error: 'Faltan OPENAI_API_KEY o ANTHROPIC_API_KEY en variables de entorno',
       });
     }
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     console.log('[generate] Starting generation pipeline...');
 
