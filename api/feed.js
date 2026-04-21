@@ -16,25 +16,33 @@ export default async function handler(req, res) {
   const { category } = req.query;
 
   // Buscar la última edición con tarjetas publicadas
-  const { data: latest } = await supabase
+  const { data: latest, error: latestErr } = await supabase
     .from('cards')
-    .select('edition_date')
+    .select('edition_date, published_at')
     .eq('status', 'published')
-    .order('edition_date', { ascending: false })
+    .order('published_at', { ascending: false, nullsFirst: false })
     .limit(1);
+
+  if (latestErr) return res.status(500).json({ error: latestErr.message });
 
   if (!latest || latest.length === 0) {
     return res.status(200).json({ date: null, cards: [] });
   }
 
-  const editionDate = latest[0].edition_date;
+  const editionDate = latest[0].edition_date || null;
+  let query = supabase.from('cards').select('*').eq('status', 'published');
 
-  let query = supabase
-    .from('cards')
-    .select('*')
-    .eq('status', 'published')
-    .eq('edition_date', editionDate)
-    .order('order_index', { ascending: true });
+  // Caso normal: edición con fecha.
+  // Fallback: si la fecha viene null, mostramos las publicadas más recientes.
+  if (editionDate) {
+    query = query
+      .eq('edition_date', editionDate)
+      .order('order_index', { ascending: true });
+  } else {
+    query = query
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .limit(30);
+  }
 
   if (category) {
     query = query.eq('category', category);
