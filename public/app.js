@@ -11,25 +11,25 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 // Paleta → color para categorías
 const CATEGORY_COLORS = {
   'Política monetaria': '',
-  'Materias primas':    'green',
-  'Macro Europa':       'blue',
-  'Macro':              'blue',
-  'Tech':               'red',
-  'Bolsa':              'red',
-  'Cripto':             'purple',
-  'Energía':            'green',
-  'España':             '',
-  'Geopolítica':        'blue',
-  'Inmobiliario':       '',
-  'Laboral':            '',
+  'Materias primas': 'green',
+  'Macro Europa': 'blue',
+  'Macro': 'blue',
+  'Tech': 'red',
+  'Bolsa': 'red',
+  'Cripto': 'purple',
+  'Energía': 'green',
+  'España': '',
+  'Geopolítica': 'blue',
+  'Inmobiliario': '',
+  'Laboral': '',
 };
 
 const MARKET_CATEGORIES = {
-  indices:  'Índices bursátiles',
+  indices: 'Índices bursátiles',
   materias: 'Materias primas',
-  divisas:  'Divisas',
-  cripto:   'Criptomonedas',
-  bonos:    'Bonos',
+  divisas: 'Divisas',
+  cripto: 'Criptomonedas',
+  bonos: 'Bonos',
 };
 
 // ============================================================
@@ -151,7 +151,7 @@ function renderFeed(filterCategory = null) {
       <div class="intro-stats">
         <div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div>
         <div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura total</div></div>
-        <div class="intro-stat"><div class="num">${cards.reduce((a,c) => a + (c.sources_text?.split('·').length || 1), 0)}</div><div class="txt">fuentes</div></div>
+        <div class="intro-stat"><div class="num">${cards.reduce((a, c) => a + (c.sources_text?.split('·').length || 1), 0)}</div><div class="txt">fuentes</div></div>
       </div>
     </section>
   `;
@@ -353,15 +353,15 @@ function setMarketTab(tab) {
 // ÁMBITOS
 // ============================================================
 const TOPICS = [
-  { key: 'Macro',              name: 'Macro­economía',      icon: 'M', featured: true },
-  { key: 'Bolsa',              name: 'Bolsa y acciones',     icon: 'B' },
-  { key: 'Inmobiliario',       name: 'Inmobi­liario',        icon: 'I' },
-  { key: 'Cripto',             name: 'Cripto y blockchain',  icon: '₿' },
-  { key: 'Energía',            name: 'Energía y materias',   icon: 'E' },
-  { key: 'Laboral',            name: 'Laboral y pensiones',  icon: 'L' },
-  { key: 'Geopolítica',        name: 'Geopolítica',          icon: 'G' },
-  { key: 'Tech',               name: 'Tech e innovación',    icon: 'T' },
-  { key: 'España',             name: 'España',               icon: 'E' },
+  { key: 'Macro', name: 'Macro­economía', icon: 'M', featured: true },
+  { key: 'Bolsa', name: 'Bolsa y acciones', icon: 'B' },
+  { key: 'Inmobiliario', name: 'Inmobi­liario', icon: 'I' },
+  { key: 'Cripto', name: 'Cripto y blockchain', icon: '₿' },
+  { key: 'Energía', name: 'Energía y materias', icon: 'E' },
+  { key: 'Laboral', name: 'Laboral y pensiones', icon: 'L' },
+  { key: 'Geopolítica', name: 'Geopolítica', icon: 'G' },
+  { key: 'Tech', name: 'Tech e innovación', icon: 'T' },
+  { key: 'España', name: 'España', icon: 'E' },
 ];
 
 function renderTopics() {
@@ -535,28 +535,58 @@ function closeLogin() {
   $('login-modal').classList.remove('open');
 }
 
-async function sendMagicLink() {
+let loginMode = 'login';
+
+function showTab(mode) {
+  loginMode = mode;
+  const isLogin = mode === 'login';
+  $('tab-login').style.background = isLogin ? '' : 'transparent';
+  $('tab-login').style.color = isLogin ? '' : '#9a958b';
+  $('tab-login').style.border = isLogin ? '' : '1px solid #3a3530';
+  $('tab-register').style.background = isLogin ? 'transparent' : '';
+  $('tab-register').style.color = isLogin ? '#9a958b' : '';
+  $('tab-register').style.border = isLogin ? '1px solid #3a3530' : '';
+  $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
+  $('login-status').textContent = '';
+}
+
+async function submitLogin() {
   const email = $('login-email').value.trim();
+  const password = $('login-password').value;
   const status = $('login-status');
+
   if (!email.includes('@')) {
     status.textContent = 'Email inválido';
     status.className = 'login-status error';
     return;
   }
+  if (!password || password.length < 6) {
+    status.textContent = 'La contraseña debe tener al menos 6 caracteres';
+    status.className = 'login-status error';
+    return;
+  }
 
-  status.textContent = 'Enviando...';
+  status.textContent = loginMode === 'login' ? 'Iniciando sesión...' : 'Creando cuenta...';
   status.className = 'login-status';
 
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: location.origin },
-  });
-
-  if (error) {
-    status.textContent = error.message;
-    status.className = 'login-status error';
+  if (loginMode === 'register') {
+    const { error } = await supabaseClient.auth.signUp({ email, password });
+    if (error) {
+      status.textContent = error.message;
+      status.className = 'login-status error';
+    } else {
+      status.textContent = '¡Cuenta creada! Ya puedes entrar.';
+      showTab('login');
+    }
   } else {
-    status.textContent = `Enlace enviado a ${email}. Revisa tu bandeja.`;
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      status.textContent = error.message;
+      status.className = 'login-status error';
+    } else {
+      closeLogin();
+      toast('Sesión iniciada ✓');
+    }
   }
 }
 
