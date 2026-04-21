@@ -6,7 +6,7 @@
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
 
 // Cliente Supabase
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Paleta → color para categorías
 const CATEGORY_COLORS = {
@@ -440,10 +440,10 @@ async function toggleSave(cardId, btn) {
 
   if (state.session) {
     if (saved) {
-      await supabase.from('saved_cards').delete()
+      await supabaseClient.from('saved_cards').delete()
         .match({ user_id: state.session.user.id, card_id: cardId });
     } else {
-      await supabase.from('saved_cards').insert({
+      await supabaseClient.from('saved_cards').insert({
         user_id: state.session.user.id,
         card_id: cardId,
       });
@@ -523,7 +523,7 @@ async function shareCard(id) {
 async function openProfile() {
   if (state.session) {
     if (confirm(`Sesión iniciada como ${state.session.user.email}. ¿Cerrar sesión?`)) {
-      await supabase.auth.signOut();
+      await supabaseClient.auth.signOut();
       location.reload();
     }
   } else {
@@ -547,7 +547,7 @@ async function sendMagicLink() {
   status.textContent = 'Enviando...';
   status.className = 'login-status';
 
-  const { error } = await supabase.auth.signInWithOtp({
+  const { error } = await supabaseClient.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: location.origin },
   });
@@ -561,7 +561,7 @@ async function sendMagicLink() {
 }
 
 async function refreshSession() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   state.session = session;
   if (session) {
     $('profile-btn').textContent = session.user.email[0].toUpperCase();
@@ -570,7 +570,7 @@ async function refreshSession() {
   }
 }
 
-supabase.auth.onAuthStateChange((_event, session) => {
+supabaseClient.auth.onAuthStateChange((_event, session) => {
   state.session = session;
   refreshSession();
   loadSavedCards();
