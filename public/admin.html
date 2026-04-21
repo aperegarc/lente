@@ -786,8 +786,16 @@
    Conecta con Supabase + /api/admin/cards
    ============================================================ */
 
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LENTE_CONFIG;
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabaseClient = null;
+
+function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+  if (!window.LENTE_CONFIG) throw new Error('Falta window.LENTE_CONFIG (config.js no cargado)');
+  if (!window.supabase?.createClient) throw new Error('SDK de Supabase no cargado');
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LENTE_CONFIG;
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return supabaseClient;
+}
 
 const state = {
   session: null,
@@ -809,7 +817,8 @@ function toast(msg, ms = 2200) {
 // ============ AUTH ============
 
 async function checkSession() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
+  const client = getSupabaseClient();
+  const { data: { session } } = await client.auth.getSession();
   state.session = session;
 
   if (!session) {
@@ -819,7 +828,7 @@ async function checkSession() {
   }
 
   // Verificar que es admin
-  const { data: profile } = await supabaseClient
+  const { data: profile } = await client
     .from('profiles')
     .select('is_admin')
     .eq('id', session.user.id)
@@ -843,6 +852,7 @@ async function checkSession() {
 }
 
 async function sendMagicLink() {
+  const client = getSupabaseClient();
   const email = $('login-email').value.trim();
   const status = $('login-status');
 
@@ -855,7 +865,7 @@ async function sendMagicLink() {
   status.className = 'login-status show';
   status.textContent = 'Enviando enlace...';
 
-  const { error } = await supabaseClient.auth.signInWithOtp({
+  const { error } = await client.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: location.href },
   });
@@ -870,15 +880,25 @@ async function sendMagicLink() {
 }
 
 async function logout() {
-  await supabaseClient.auth.signOut();
+  const client = getSupabaseClient();
+  await client.auth.signOut();
   location.reload();
 }
 
-supabaseClient.auth.onAuthStateChange(() => {
-  checkSession().then(ok => {
-    if (ok) loadCards();
-  });
-});
+function initAuthListeners() {
+  try {
+    const client = getSupabaseClient();
+    client.auth.onAuthStateChange(() => {
+      checkSession().then(ok => {
+        if (ok) loadCards();
+      });
+    });
+  } catch (err) {
+    const status = $('login-status');
+    status.className = 'login-status show error';
+    status.textContent = err.message;
+  }
+}
 
 // ============ API ============
 
@@ -1157,6 +1177,17 @@ document.querySelectorAll('.nav-item[data-status]').forEach(item => {
 // ============ INIT ============
 
 (async () => {
+  window.sendMagicLink = sendMagicLink;
+  window.logout = logout;
+  window.triggerIngest = triggerIngest;
+  window.triggerGenerate = triggerGenerate;
+  window.closeEdit = closeEdit;
+  window.saveEdit = saveEdit;
+  window.edit = edit;
+  window.act = act;
+  window.publishAll = publishAll;
+  window.loadCards = loadCards;
+  initAuthListeners();
   const ok = await checkSession();
   if (ok) await loadCards();
 })();
