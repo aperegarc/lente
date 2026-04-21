@@ -74,15 +74,27 @@ export default async function handler(req, res) {
     }
 
     if (action === 'publish_all') {
-      // Publica todas las aprobadas de hoy
-      const today = new Date().toISOString().split('T')[0];
+      // Publica todas las aprobadas de la última edición disponible
+      const { data: latestApproved, error: latestErr } = await supabase
+        .from('cards')
+        .select('edition_date')
+        .eq('status', 'approved')
+        .order('edition_date', { ascending: false })
+        .limit(1);
+
+      if (latestErr) return res.status(500).json({ error: latestErr.message });
+      if (!latestApproved || latestApproved.length === 0) {
+        return res.status(200).json({ ok: true, published: 0, reason: 'no_approved_cards' });
+      }
+
+      const latestEditionDate = latestApproved[0].edition_date;
       const { error } = await supabase
         .from('cards')
         .update({ status: 'published', published_at: new Date().toISOString() })
         .eq('status', 'approved')
-        .eq('edition_date', today);
+        .eq('edition_date', latestEditionDate);
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, published_edition_date: latestEditionDate });
     }
 
     return res.status(400).json({ error: 'Unknown action' });
