@@ -46,6 +46,21 @@ REGLAS:
 - NUNCA inventes cifras. Si no estás seguro de un dato, omítelo.
 - Responde SOLO con el JSON, nada más.`;
 
+function buildKeywordClusters(articles) {
+  const byTopic = new Map();
+  for (const art of articles) {
+    const topic = detectTopic([art.title || '', art.snippet || '']);
+    if (!byTopic.has(topic)) byTopic.set(topic, []);
+    byTopic.get(topic).push(art);
+  }
+  return [...byTopic.entries()].map(([topic, grouped]) => ({
+    centroid: null,
+    topic,
+    articles: grouped,
+    unique_sources: new Set(grouped.map(a => a.source_name)).size,
+  }));
+}
+
 // ============================================================
 // UTILIDADES
 // ============================================================
@@ -123,12 +138,11 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(500).json({
-        error: 'Faltan OPENAI_API_KEY o ANTHROPIC_API_KEY en variables de entorno',
+        error: 'Falta ANTHROPIC_API_KEY en variables de entorno',
       });
     }
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     console.log('[generate] Starting generation pipeline...');
@@ -153,26 +167,31 @@ export default async function handler(req, res) {
   // ============================================================
   // 2. Generar embeddings en batch
   // ============================================================
-    if (pendingArticles.length > 0) {
-      const texts = pendingArticles.map(a => `${a.title}. ${a.snippet || ''}`.slice(0, 2000));
-      const emb = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: texts,
-      });
+    if (pendingArticles.length > 0 && process.env.OPENAI_API_KEY) {
+      try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const texts = pendingArticles.map(a => `${a.title}. ${a.snippet || ''}`.slice(0, 2000));
+        const emb = await openai.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: texts,
+        });
 
-      const updates = pendingArticles.map((art, i) => ({
-        id: art.id,
-        embedding: emb.data[i].embedding,
-      }));
+        const updates = pendingArticles.map((art, i) => ({
+          id: art.id,
+          embedding: emb.data[i].embedding,
+        }));
 
-      // Actualizar en lotes de 50
-      for (let i = 0; i < updates.length; i += 50) {
-        const batch = updates.slice(i, i + 50);
-        for (const u of batch) {
-          await supabase.from('articles').update({ embedding: u.embedding }).eq('id', u.id);
+        // Actualizar en lotes de 50
+        for (let i = 0; i < updates.length; i += 50) {
+          const batch = updates.slice(i, i + 50);
+          for (const u of batch) {
+            await supabase.from('articles').update({ embedding: u.embedding }).eq('id', u.id);
+          }
         }
+        console.log(`[generate] ✓ ${updates.length} embeddings generados`);
+      } catch (err) {
+        console.warn('[generate] OpenAI embeddings no disponibles, activando fallback por keywords:', err.message);
       }
-      console.log(`[generate] ✓ ${updates.length} embeddings generados`);
     }
 
   // ============================================================
@@ -188,15 +207,25 @@ export default async function handler(req, res) {
   // ============================================================
   // 4. Clustering
   // ============================================================
-  const rawClusters = clusterArticles(articles || [], 0.78);
-  // Nos quedamos solo con clusters que tienen >= 2 fuentes distintas
-  const significant = rawClusters
-    .map(c => ({
-      ...c,
-      unique_sources: new Set(c.articles.map(a => a.source_name)).size,
-    }))
-    .filter(c => c.unique_sources >= 2)
-    .sort((a, b) => b.unique_sources - a.unique_sources);
+  const embeddedArticles = (articles || []).filter(a => Array.isArray(a.embedding));
+  let significant = [];
+  if (embeddedArticles.length >= 12) {
+    const rawClusters = clusterArticles(embeddedArticles, 0.78);
+    significant = rawClusters
+      .map(c => ({
+        ...c,
+        topic: detectTopic(c.articles.map(a => a.title || '')),
+        unique_sources: new Set(c.articles.map(a => a.source_name)).size,
+      }))
+      .filter(c => c.unique_sources >= 2)
+      .sort((a, b) => b.unique_sources - a.unique_sources);
+    console.log(`[generate] modo embeddings: ${significant.length} clusters significativos`);
+  } else {
+    significant = buildKeywordClusters(articles || [])
+      .filter(c => c.unique_sources >= 2)
+      .sort((a, b) => b.unique_sources - a.unique_sources);
+    console.log(`[generate] modo fallback keywords: ${significant.length} clusters significativos`);
+  }
 
   console.log(`[generate] ${significant.length} clusters significativos`);
 
@@ -213,7 +242,7 @@ export default async function handler(req, res) {
 
   for (const cluster of topClusters) {
     const titles = cluster.articles.map(a => a.title);
-    const topic = detectTopic(titles);
+    const topic = cluster.topic || detectTopic(titles);
 
     // Persistimos cluster
     const { data: savedCluster } = await supabase
