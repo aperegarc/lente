@@ -33,7 +33,7 @@ Para cada tema que te pase, responde ÚNICAMENTE con un JSON válido (sin markdo
   "category": "Política monetaria | Materias primas | Macro Europa | Bolsa | Cripto | Energía | España | Tech | Geopolítica",
   "headline": "Máximo 12 palabras. UNA palabra rodeada de <em></em> para énfasis.",
   "deck": "Resumen de 1-2 frases que despeja la pregunta del titular.",
-  "body": "Máximo 80 palabras. Explica QUÉ ha pasado y POR QUÉ. Sin jerga.",
+  ""body": "Entre 60 y 120 palabras. Explica QUÉ ha pasado y POR QUÉ. Sin jerga. SIEMPRE termina con una frase completa, nunca a medias. Escribe en español, nunca copies frases literales de las fuentes.",
   "meaning": "Máximo 60 palabras. Adapta según la categoría:
 - Política monetaria: impacto en hipotecas variables y Euríbor
 - Bolsa/ETFs: qué significa para carteras indexadas españolas
