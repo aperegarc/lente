@@ -195,13 +195,12 @@ export default async function handler(req, res) {
     }
 
   // ============================================================
-  // 3. Cargar todos los artículos recientes con embedding
+  // 3. Cargar todos los artículos recientes (con o sin embedding)
   // ============================================================
   const { data: articles } = await supabase
     .from('articles')
     .select('id, title, snippet, source_name, embedding')
     .gt('pub_date', yesterday)
-    .not('embedding', 'is', null)
     .limit(500);
 
   // ============================================================
