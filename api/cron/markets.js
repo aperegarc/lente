@@ -10,6 +10,7 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+const yf = yahooFinance?.default ?? yahooFinance;
 
 export default async function handler(req, res) {
   if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -25,10 +26,14 @@ export default async function handler(req, res) {
 
   for (const m of markets) {
     try {
-      const q = await yahooFinance.quote(m.symbol);
+      if (typeof yf.quote !== 'function' || typeof yf.chart !== 'function') {
+        throw new Error('yahoo-finance2 no está inicializado correctamente');
+      }
+
+      const q = await yf.quote(m.symbol);
 
       // Para el sparkline: precios intradía de las últimas 24h aprox
-      const chart = await yahooFinance.chart(m.symbol, {
+      const chart = await yf.chart(m.symbol, {
         period1: new Date(Date.now() - 24 * 3600 * 1000),
         interval: '1h',
       });

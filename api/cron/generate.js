@@ -16,6 +16,7 @@ const supabase = createClient(
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest';
 
 // ============================================================
 // PROMPT DE SISTEMA — la "voz editorial" de lente
@@ -119,11 +120,18 @@ function detectTopic(titles) {
 // HANDLER PRINCIPAL
 // ============================================================
 export default async function handler(req, res) {
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  try {
+    if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-  console.log('[generate] Starting generation pipeline...');
+    if (!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({
+        error: 'Faltan OPENAI_API_KEY o ANTHROPIC_API_KEY en variables de entorno',
+      });
+    }
+
+    console.log('[generate] Starting generation pipeline...');
 
   // ============================================================
   // 1. Cargar artículos recientes sin embedding
@@ -137,34 +145,35 @@ export default async function handler(req, res) {
     .is('embedding', null)
     .limit(200);
 
-  if (pendErr) return res.status(500).json({ error: pendErr.message });
+    if (pendErr) return res.status(500).json({ error: pendErr.message });
 
-  console.log(`[generate] ${pending.length} articles need embeddings`);
+    const pendingArticles = pending || [];
+    console.log(`[generate] ${pendingArticles.length} articles need embeddings`);
 
   // ============================================================
   // 2. Generar embeddings en batch
   // ============================================================
-  if (pending.length > 0) {
-    const texts = pending.map(a => `${a.title}. ${a.snippet || ''}`.slice(0, 2000));
-    const emb = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: texts,
-    });
+    if (pendingArticles.length > 0) {
+      const texts = pendingArticles.map(a => `${a.title}. ${a.snippet || ''}`.slice(0, 2000));
+      const emb = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: texts,
+      });
 
-    const updates = pending.map((art, i) => ({
-      id: art.id,
-      embedding: emb.data[i].embedding,
-    }));
+      const updates = pendingArticles.map((art, i) => ({
+        id: art.id,
+        embedding: emb.data[i].embedding,
+      }));
 
-    // Actualizar en lotes de 50
-    for (let i = 0; i < updates.length; i += 50) {
-      const batch = updates.slice(i, i + 50);
-      for (const u of batch) {
-        await supabase.from('articles').update({ embedding: u.embedding }).eq('id', u.id);
+      // Actualizar en lotes de 50
+      for (let i = 0; i < updates.length; i += 50) {
+        const batch = updates.slice(i, i + 50);
+        for (const u of batch) {
+          await supabase.from('articles').update({ embedding: u.embedding }).eq('id', u.id);
+        }
       }
+      console.log(`[generate] ✓ ${updates.length} embeddings generados`);
     }
-    console.log(`[generate] ✓ ${updates.length} embeddings generados`);
-  }
 
   // ============================================================
   // 3. Cargar todos los artículos recientes con embedding
@@ -236,7 +245,7 @@ export default async function handler(req, res) {
 
     try {
       const response = await claude.messages.create({
-        model: 'claude-sonnet-4-5',
+        model: ANTHROPIC_MODEL,
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
         messages: [{
@@ -278,16 +287,22 @@ export default async function handler(req, res) {
     }
   }
 
-  console.log(`[generate] Pipeline completo: ${generatedCards.length} tarjetas pendientes de revisión`);
+    console.log(`[generate] Pipeline completo: ${generatedCards.length} tarjetas pendientes de revisión`);
 
-  return res.status(200).json({
-    clusters_detected: significant.length,
-    clusters_selected: topClusters.length,
-    cards_generated: generatedCards.length,
-    cards: generatedCards.map(c => ({
-      id: c.id,
-      headline: c.headline,
-      category: c.category,
-    })),
-  });
+    return res.status(200).json({
+      clusters_detected: significant.length,
+      clusters_selected: topClusters.length,
+      cards_generated: generatedCards.length,
+      cards: generatedCards.map(c => ({
+        id: c.id,
+        headline: c.headline,
+        category: c.category,
+      })),
+    });
+  } catch (err) {
+    console.error('[generate] Fatal error:', err);
+    return res.status(500).json({
+      error: err?.message || 'Error interno en generate',
+    });
+  }
 }
