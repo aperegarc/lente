@@ -15,44 +15,23 @@ export default async function handler(req, res) {
 
   const { category } = req.query;
 
-  // Buscar la última edición con tarjetas publicadas
-  const { data: latest, error: latestErr } = await supabase
-    .from('cards')
-    .select('edition_date, published_at')
-    .eq('status', 'published')
-    .order('published_at', { ascending: false, nullsFirst: false })
-    .limit(1);
+  let query = supabase.from('cards').select('*');
 
-  if (latestErr) return res.status(500).json({ error: latestErr.message });
-
-  if (!latest || latest.length === 0) {
-    return res.status(200).json({ date: null, cards: [] });
-  }
-
-  const editionDate = latest[0].edition_date || null;
-  let query = supabase.from('cards').select('*').eq('status', 'published');
-
-  // Caso normal: edición con fecha.
-  // Fallback: si la fecha viene null, mostramos las publicadas más recientes.
-  if (editionDate) {
-    query = query
-      .eq('edition_date', editionDate)
-      .order('order_index', { ascending: true });
-  } else {
-    query = query
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .limit(30);
-  }
-
+  // Filtro por categoría si se pide
   if (category) {
     query = query.eq('category', category);
   }
+
+  // Siempre mostramos las más recientes
+  query = query
+    .order('generated_at', { ascending: false, nullsFirst: false })
+    .limit(50);
 
   const { data: cards, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
   return res.status(200).json({
-    date: editionDate,
+    date: cards?.length > 0 ? cards[0].edition_date : null,
     cards: cards || [],
   });
 }

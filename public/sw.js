@@ -3,7 +3,7 @@
 // Cache básico: arranca offline aunque no haya conexión
 // ============================================================
 
-const VERSION = 'lente-v1';
+const VERSION = 'lente-v2';
 const CORE_ASSETS = [
   '/',
   '/index.html',
