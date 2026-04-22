@@ -2,16 +2,17 @@
 // /api/markets.js — datos públicos de mercados
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+import { getSupabaseAnon } from './_lib/clients.js';
 
 export default async function handler(req, res) {
-  // Cache: 1 min
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+
+  let supabase;
+  try {
+    supabase = getSupabaseAnon();
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 
   const { category } = req.query;
 
@@ -21,16 +22,15 @@ export default async function handler(req, res) {
   const { data, error } = await query.order('category').order('name');
   if (error) return res.status(500).json({ error: error.message });
 
-  // Agrupar por categoría
   const grouped = {};
-  for (const m of data) {
+  for (const m of data || []) {
     if (!grouped[m.category]) grouped[m.category] = [];
     grouped[m.category].push(m);
   }
 
   return res.status(200).json({
-    updated_at: data[0]?.updated_at,
+    updated_at: data?.[0]?.updated_at,
     grouped,
-    flat: data,
+    flat: data || [],
   });
 }

@@ -1,24 +1,23 @@
 // ============================================================
 // /api/cron/markets.js
-// Actualiza cotizaciones desde Yahoo Finance cada 15 min
+// Cotizaciones de Yahoo Finance
 // ============================================================
 
 import yahooFinance from 'yahoo-finance2';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
-const YahooFinance = yahooFinance?.default ?? yahooFinance;
-const yf = new YahooFinance();
+import { getSupabaseAdmin, isValidCronRequest } from '../_lib/clients.js';
 
 export default async function handler(req, res) {
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isValidCronRequest(req)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // Cargar los mercados configurados
+  let supabase;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    return res.status(500).json({ error: 'Config error', details: err.message });
+  }
+
   const { data: markets, error } = await supabase.from('markets').select('*');
   if (error) return res.status(500).json({ error: error.message });
 
@@ -27,13 +26,17 @@ export default async function handler(req, res) {
 
   for (const m of markets) {
     try {
-      if (typeof yf.quote !== 'function') {
-        throw new Error('yahoo-finance2 no está inicializado correctamente');
+      const q = await yahooFinance.quote(m.symbol);
+      let sparkline = [];
+      try {
+        const chart = await yahooFinance.chart(m.symbol, {
+          period1: new Date(Date.now() - 24 * 3600 * 1000),
+          interval: '1h',
+        });
+        sparkline = (chart.quotes?.map(p => p.close).filter(Boolean) || []).slice(-12);
+      } catch (_) {
+        // Si falla el chart, nos quedamos sin sparkline pero guardamos el resto
       }
-
-      const q = await yf.quote(m.symbol);
-      // Esta versión de yahoo-finance2 no expone chart(), dejamos sparkline vacío.
-      const sparkline = [];
 
       await supabase
         .from('markets')
@@ -41,7 +44,7 @@ export default async function handler(req, res) {
           price: q.regularMarketPrice,
           change_pct: q.regularMarketChangePercent,
           change_abs: q.regularMarketChange,
-          sparkline: sparkline.slice(-12), // últimos 12 puntos
+          sparkline,
           updated_at: new Date().toISOString(),
         })
         .eq('symbol', m.symbol);
@@ -54,7 +57,9 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({
+    ok: true,
     updated: updated.length,
-    errors,
+    errors: errors.length,
+    error_details: errors,
   });
 }

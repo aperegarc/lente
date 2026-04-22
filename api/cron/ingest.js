@@ -1,38 +1,36 @@
 // ============================================================
 // /api/cron/ingest.js
-// Ingestión RSS — se ejecuta vía Vercel Cron 2 veces al día
-// ============================================================
-// Configurado en vercel.json para correr a las 06:00 y 14:00 UTC
+// Ingestión RSS — se ejecuta vía Vercel Cron + trigger manual
 // ============================================================
 
 import Parser from 'rss-parser';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY  // service key: acceso admin, bypasea RLS
-);
+import { getSupabaseAdmin, isValidCronRequest, getDeploymentUrl } from '../_lib/clients.js';
 
 const parser = new Parser({
   timeout: 15000,
   headers: { 'User-Agent': 'lente-bot/1.0' },
 });
 
-// Palabras clave para descartar artículos irrelevantes
 const BLOCKLIST = [
   'horóscopo', 'fútbol', 'receta', 'gossip', 'famoso',
   'netflix', 'serie', 'película', 'cine',
 ];
 
 function isRelevant(article) {
-  const text = `${article.title} ${article.contentSnippet || ''}`.toLowerCase();
+  const text = `${article.title || ''} ${article.contentSnippet || ''}`.toLowerCase();
   return !BLOCKLIST.some(kw => text.includes(kw));
 }
 
 export default async function handler(req, res) {
-  // Protección: solo Vercel Cron puede llamar esto
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (!isValidCronRequest(req)) {
+    return res.status(401).json({ error: 'Unauthorized — falta o es inválido el Bearer token' });
+  }
+
+  let supabase;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    return res.status(500).json({ error: 'Config error', details: err.message });
   }
 
   console.log('[ingest] Starting RSS ingestion...');
@@ -44,25 +42,36 @@ export default async function handler(req, res) {
     .eq('active', true);
 
   if (srcErr) {
-    return res.status(500).json({ error: 'Could not load sources', details: srcErr });
+    console.error('[ingest] Could not load sources:', srcErr);
+    return res.status(500).json({
+      error: 'Could not load sources',
+      hint: '¿Has ejecutado schema.sql en Supabase? Comprueba que existe la tabla "sources" con filas',
+      details: srcErr.message,
+    });
+  }
+
+  if (!sources || sources.length === 0) {
+    return res.status(500).json({
+      error: 'No hay fuentes activas',
+      hint: 'Ejecuta schema.sql en Supabase para cargar las fuentes por defecto',
+    });
   }
 
   const results = {
     sources_processed: 0,
     articles_new: 0,
-    articles_skipped: 0,
     errors: [],
   };
 
-  // 2. Procesar cada fuente en paralelo (limitado)
+  // 2. Procesar cada fuente
   for (const source of sources) {
     try {
       console.log(`[ingest] Fetching ${source.name}...`);
       const feed = await parser.parseURL(source.url);
 
-      const items = feed.items
+      const items = (feed.items || [])
         .filter(isRelevant)
-        .slice(0, 30);  // máx 30 por fuente por ejecución
+        .slice(0, 30);
 
       const rows = items.map(item => ({
         source_id: source.id,
@@ -73,28 +82,42 @@ export default async function handler(req, res) {
         pub_date: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
       })).filter(r => r.link);
 
-      // Upsert por link (ignora duplicados)
+      if (rows.length === 0) {
+        console.log(`[ingest] ${source.name}: sin items relevantes`);
+        results.sources_processed++;
+        continue;
+      }
+
       const { error: insErr, count } = await supabase
         .from('articles')
         .upsert(rows, { onConflict: 'link', ignoreDuplicates: true, count: 'exact' });
 
       if (insErr) throw insErr;
 
-      results.articles_new += count || rows.length;
+      results.articles_new += count || 0;
       results.sources_processed++;
-      console.log(`[ingest] ✓ ${source.name}: ${rows.length} items`);
+      console.log(`[ingest] ✓ ${source.name}: ${rows.length} items, ${count || 0} nuevos`);
     } catch (err) {
       console.error(`[ingest] ✗ ${source.name}:`, err.message);
       results.errors.push({ source: source.name, error: err.message });
     }
   }
 
-  // 3. Después de ingestar, lanzamos el clustering+generación
-  //    mediante una llamada a la siguiente función de la cadena
-  const next = `${process.env.DEPLOYMENT_URL}/api/cron/generate`;
-  fetch(next, {
-    headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
-  }).catch(err => console.error('[ingest] Could not chain to /generate:', err));
+  // 3. Encadenar con generación automáticamente
+  const deploymentUrl = getDeploymentUrl(req);
+  const nextUrl = `${deploymentUrl}/api/cron/generate`;
 
-  return res.status(200).json(results);
+  // Fire-and-forget: no bloqueamos la respuesta esperando a generate
+  fetch(nextUrl, {
+    headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+  }).catch(err => {
+    console.error('[ingest] Could not chain to /generate:', err.message);
+  });
+
+  console.log(`[ingest] Done. ${results.articles_new} new articles across ${results.sources_processed} sources`);
+  return res.status(200).json({
+    ok: true,
+    ...results,
+    next_step: 'generate triggered',
+  });
 }
