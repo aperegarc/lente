@@ -1,15 +1,10 @@
 // ============================================================
 // /api/cron/generate.js
-// Clustering + priorización + generación de tarjetas con Claude
 // ============================================================
 
-import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { getSupabaseAdmin, isValidCronRequest } from '../_lib/clients.js';
 
-// ============================================================
-// PROMPT DE SISTEMA — la "voz editorial" de lente
-// ============================================================
 const SYSTEM_PROMPT = `Eres el editor jefe de lente, una app de noticias económicas diarias para inversores pasivos españoles que quieren entender el mundo en 5 minutos.
 
 TU LECTOR:
@@ -37,9 +32,6 @@ REGLAS:
 - NUNCA inventes cifras. Si no estás seguro de un dato, omítelo.
 - Responde SOLO con el JSON, nada más.`;
 
-// ============================================================
-// Similitud del coseno
-// ============================================================
 function cosineSim(a, b) {
   let dot = 0, na = 0, nb = 0;
   for (let i = 0; i < a.length; i++) {
@@ -50,7 +42,6 @@ function cosineSim(a, b) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-// Agrupa artículos por similitud del coseno
 function clusterArticles(articles, threshold = 0.78) {
   const clusters = [];
   for (const art of articles) {
@@ -98,20 +89,13 @@ function detectTopic(titles) {
   return 'Macro';
 }
 
-// ============================================================
-// HANDLER
-// ============================================================
 export default async function handler(req, res) {
   if (!isValidCronRequest(req)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // Validación de keys de IA
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('...')) {
-    return res.status(500).json({
-      error: 'OPENAI_API_KEY no configurada',
-      hint: 'Consigue una key en https://platform.openai.com/api-keys y carga al menos $5',
-    });
+  if (!process.env.VOYAGE_API_KEY) {
+    return res.status(500).json({ error: 'VOYAGE_API_KEY no configurada' });
   }
   if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY.includes('...')) {
     return res.status(500).json({
@@ -120,10 +104,9 @@ export default async function handler(req, res) {
     });
   }
 
-  let supabase, openai, claude;
+  let supabase, claude;
   try {
     supabase = getSupabaseAdmin();
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY.trim() });
     claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY.trim() });
   } catch (err) {
     return res.status(500).json({ error: 'Config error', details: err.message });
@@ -131,68 +114,103 @@ export default async function handler(req, res) {
 
   console.log('[generate] Starting generation pipeline...');
 
-  const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-
   // ============================================================
-  // 1. Artículos recientes sin embedding
+  // 1. Artículos sin embedding — SIN filtro de fecha
   // ============================================================
   const { data: pending, error: pendErr } = await supabase
     .from('articles')
-    .select('id, title, snippet')
-    .gt('pub_date', yesterday)
+    .select('id, title, snippet, pub_date')
     .is('embedding', null)
-    .limit(200);
+    .order('pub_date', { ascending: false })
+    .limit(300);
 
   if (pendErr) {
     console.error('[generate] Error loading pending:', pendErr);
     return res.status(500).json({ error: pendErr.message });
   }
 
-  console.log(`[generate] ${pending?.length || 0} articles need embeddings`);
+  console.log(`[generate] ${pending?.length ?? 0} artículos sin embedding`);
+  if (pending?.length > 0) {
+    console.log('[generate] Muestra pub_dates:', pending.slice(0, 3).map(a => a.pub_date));
+  }
 
   // ============================================================
-  // 2. Generar embeddings
+  // 2. Generar embeddings con Voyage AI
   // ============================================================
   if (pending && pending.length > 0) {
     try {
       const texts = pending.map(a => `${a.title}. ${a.snippet || ''}`.slice(0, 2000));
-      const emb = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: texts,
-      });
+
+      const batches = [];
+      for (let i = 0; i < texts.length; i += 128) {
+        batches.push(texts.slice(i, i + 128));
+      }
+
+      const embeddings = [];
+      for (const batch of batches) {
+        const voyageRes = await fetch('https://api.voyageai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.VOYAGE_API_KEY}`,
+          },
+          body: JSON.stringify({ model: 'voyage-3-lite', input: batch }),
+        });
+        const data = await voyageRes.json();
+        if (!voyageRes.ok) throw new Error(data.detail || JSON.stringify(data));
+        embeddings.push(...data.data.map(d => d.embedding));
+      }
 
       for (let i = 0; i < pending.length; i++) {
         await supabase
           .from('articles')
-          .update({ embedding: emb.data[i].embedding })
+          .update({ embedding: embeddings[i] })
           .eq('id', pending[i].id);
       }
-      console.log(`[generate] ✓ ${pending.length} embeddings generados`);
+      console.log(`[generate] ✓ ${pending.length} embeddings generados con Voyage`);
     } catch (err) {
       console.error('[generate] Embeddings error:', err.message);
       return res.status(500).json({
-        error: 'Error generando embeddings',
-        hint: 'Comprueba que tienes saldo en OpenAI: https://platform.openai.com/usage',
+        error: 'Error generando embeddings con Voyage',
         details: err.message,
       });
     }
   }
 
   // ============================================================
-  // 3. Cargar artículos con embedding
+  // 3. Cargar artículos con embedding — SIN filtro de fecha en BD,
+  //    filtramos en JS para evitar problemas de formato de fecha
   // ============================================================
-  const { data: articles, error: artErr } = await supabase
+  const { data: allWithEmbedding, error: artErr } = await supabase
     .from('articles')
-    .select('id, title, snippet, source_name, embedding')
-    .gt('pub_date', yesterday)
+    .select('id, title, snippet, source_name, pub_date, embedding')
     .not('embedding', 'is', null)
-    .limit(500);
+    .order('pub_date', { ascending: false })
+    .limit(600);
 
   if (artErr) {
     return res.status(500).json({ error: artErr.message });
   }
 
-  if (!articles || articles.length === 0) {
+  console.log(`[generate] Total artículos con embedding en BD: ${allWithEmbedding?.length ?? 0}`);
+
+  // Filtro en JS: últimas 72h, robusto ante cualquier formato de fecha
+  const cutoffMs = Date.now() - 72 * 3600 * 1000;
+  const recentArticles = (allWithEmbedding || []).filter(a => {
+    const ms = new Date(a.pub_date).getTime();
+    return !isNaN(ms) && ms > cutoffMs;
+  });
+
+  console.log(`[generate] Artículos en ventana 72h: ${recentArticles.length}`);
+
+  // Fallback: si hay menos de 10 recientes, usar los 200 más recientes de la BD
+  const articlesToCluster = recentArticles.length >= 10
+    ? recentArticles
+    : (allWithEmbedding || []).slice(0, 200);
+
+  console.log(`[generate] Artículos a clusterizar: ${articlesToCluster.length}`);
+
+  if (articlesToCluster.length === 0) {
     return res.status(200).json({
       ok: true,
       message: 'Sin artículos para clusterizar. Ejecuta /api/cron/ingest primero.',
@@ -202,16 +220,33 @@ export default async function handler(req, res) {
   // ============================================================
   // 4. Clustering
   // ============================================================
-  const rawClusters = clusterArticles(articles, 0.78);
+  const rawClusters = clusterArticles(articlesToCluster, 0.78);
+
+  console.log(`[generate] Clusters totales: ${rawClusters.length}`);
+
   const significant = rawClusters
     .map(c => ({
       ...c,
       unique_sources: new Set(c.articles.map(a => a.source_name)).size,
     }))
-    .filter(c => c.unique_sources >= 2)
+    .filter(c => c.unique_sources >= 1 && c.articles.length >= 2)
     .sort((a, b) => b.unique_sources - a.unique_sources);
 
-  console.log(`[generate] ${significant.length} clusters significativos`);
+  console.log(`[generate] Clusters significativos: ${significant.length}`);
+
+  if (significant.length === 0) {
+    return res.status(200).json({
+      ok: true,
+      message: 'Artículos encontrados pero ningún cluster con ≥2 artículos.',
+      total_articles: articlesToCluster.length,
+      total_clusters: rawClusters.length,
+      debug_clusters: rawClusters.slice(0, 5).map(c => ({
+        size: c.articles.length,
+        sources: [...new Set(c.articles.map(a => a.source_name))],
+        title: c.articles[0]?.title?.slice(0, 60),
+      })),
+    });
+  }
 
   // ============================================================
   // 5. Top 7 y generación con Claude
@@ -224,7 +259,7 @@ export default async function handler(req, res) {
     const titles = cluster.articles.map(a => a.title);
     const topic = detectTopic(titles);
 
-    const { data: savedCluster } = await supabase
+    const { data: savedCluster, error: clusterErr } = await supabase
       .from('clusters')
       .insert({
         label: titles[0].slice(0, 120),
@@ -237,7 +272,10 @@ export default async function handler(req, res) {
       .select()
       .single();
 
-    if (!savedCluster) continue;
+    if (clusterErr || !savedCluster) {
+      console.error('[generate] Error insertando cluster:', clusterErr?.message);
+      continue;
+    }
 
     await supabase
       .from('articles')
@@ -251,7 +289,7 @@ export default async function handler(req, res) {
 
     try {
       const response = await claude.messages.create({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
         messages: [{
@@ -296,16 +334,17 @@ export default async function handler(req, res) {
       if (err.status === 401) {
         return res.status(500).json({
           error: 'ANTHROPIC_API_KEY inválida',
-          hint: 'La key que tienes no funciona. Genera una nueva en https://console.anthropic.com/settings/keys',
+          hint: 'Genera una nueva en https://console.anthropic.com/settings/keys',
         });
       }
     }
   }
 
-  console.log(`[generate] Done. ${generatedCards.length} tarjetas pendientes`);
+  console.log(`[generate] Done. ${generatedCards.length} tarjetas generadas`);
 
   return res.status(200).json({
     ok: true,
+    articles_clustered: articlesToCluster.length,
     clusters_detected: significant.length,
     clusters_selected: topClusters.length,
     cards_generated: generatedCards.length,

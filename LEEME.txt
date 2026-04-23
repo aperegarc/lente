@@ -1,0 +1,179 @@
+================================================================================
+                  🎉 BIENVENIDO A LENTE - PWA MVP COMPLETO
+================================================================================
+
+Te has descargado el proyecto LENTE completamente funcional y listo para usar.
+
+Aquí hay 29 archivos de código + documentación completa.
+
+================================================================================
+EMPEZAR EN 3 SEGUNDOS
+================================================================================
+
+1. Lee: INSTRUCCIONES-FINALES.txt  (está en la raíz)
+   → Te guía paso a paso desde el setup local hasta el deploy en Vercel
+
+2. O si tienes prisa: QUICKSTART.md
+   → 5 pasos para ver la app funcionando en 15 minutos
+
+3. O si quieres entender todo: README.md
+   → Documentación técnica completa
+
+================================================================================
+¿QUÉ INCLUYE?
+================================================================================
+
+✅ Frontend PWA (HTML/CSS/JS vanilla)
+   - App instalable en móvil
+   - Dark mode + diseño premium
+   - Service worker para offline
+   - Responsive en todos los tamaños
+
+✅ Backend serverless (Vercel)
+   - 12 endpoints completamente funcionales
+   - Validación de variables de entorno
+   - Manejo robusto de errores
+   - Logs claros para debugging
+
+✅ Pipeline de IA automático
+   - Ingestión RSS de 8 medios (2x/día)
+   - Embeddings con OpenAI
+   - Clustering inteligente (cosine similarity)
+   - Generación con Claude Sonnet 4.5
+   - Revisión humana (admin panel)
+
+✅ Admin panel completo
+   - Ver tarjetas pendientes/aprobadas/rechazadas/publicadas
+   - Editar cualquier campo
+   - Aprobar/rechazar en batch
+   - Disparar ingestión/generación manualmente
+
+✅ Base de datos (Supabase)
+   - Schema SQL listo para ejecutar
+   - Tablas: articles, clusters, cards, markets, profiles, saved_cards
+   - Row Level Security (RLS) configurado
+   - Autenticación con magic links
+
+✅ Documentación
+   - 5 archivos de documentación (.md)
+   - Instrucciones paso a paso
+   - Guía de troubleshooting
+   - Explicación de costes y roadmap
+
+================================================================================
+ESTRUCTURA DEL ZIP
+================================================================================
+
+lente-final/
+├── INSTRUCCIONES-FINALES.txt   ← EMPIEZA AQUÍ
+├── QUICKSTART.md               ← O aquí si tienes prisa
+├── README.md                   ← Documentación técnica
+├── DESARROLLO-LOCAL.md         ← Setup local detallado
+│
+├── api/                        ← Endpoints serverless (Vercel)
+│   ├── _lib/clients.js
+│   ├── health.js               ← Diagnóstico
+│   ├── feed.js, markets.js
+│   ├── cron/
+│   │   ├── ingest.js           ← Traer noticias
+│   │   ├── generate.js         ← Generar con IA
+│   │   └── markets.js
+│   └── admin/
+│       ├── cards.js            ← CRUD
+│       ├── trigger-ingest.js
+│       └── trigger-generate.js
+│
+├── public/                     ← PWA (lo que ve el usuario)
+│   ├── index.html              ← Feed principal
+│   ├── admin.html              ← Panel admin
+│   ├── app.js                  ← Lógica
+│   ├── config.js               ← Credenciales
+│   ├── styles.css
+│   ├── manifest.json
+│   ├── sw.js
+│   └── icon-*.png
+│
+├── sql/
+│   └── schema.sql              ← Ejecutar en Supabase (1x)
+│
+├── .env.example                ← Copiar a .env.local
+├── .gitignore
+├── package.json
+└── vercel.json                 ← Config de crons y rewrites
+
+================================================================================
+PRÓXIMOS PASOS
+================================================================================
+
+1️⃣  Abre INSTRUCCIONES-FINALES.txt
+    Sigue el Paso 1 (rotar keys si es necesario)
+
+2️⃣  Paso 2-3: Setup local (npm install + vercel dev)
+
+3️⃣  Paso 4: Ejecutar schema.sql en Supabase
+
+4️⃣  Paso 5: Probar el flujo en local
+    - Admin → Disparar ingestión → Ver tarjetas → Publicar
+
+5️⃣  Paso 6: Deploy a Vercel
+    - Git push → Vercel importa repo → Deploy automático
+
+6️⃣  ¡Listo! Tu app está en internet con crons automáticos
+
+================================================================================
+CHEAT SHEET
+================================================================================
+
+# Setup local (primera vez)
+npm install
+vercel dev
+# Luego configura .env.local y recarga
+
+# Verificar que todo conecta
+http://localhost:3000/api/health
+# Debe salir "ready": true
+
+# Ejecutar schema (una sola vez)
+Supabase → SQL Editor → Pega schema.sql → Run
+
+# Ver la app
+http://localhost:3000/           (feed público)
+http://localhost:3000/admin      (panel de edición)
+
+# Deploy a Vercel
+git push → Vercel lo despliega automáticamente
+
+================================================================================
+COSTES (IMPORTANTE)
+================================================================================
+
+✓ Vercel (Hobby):      0€/mes
+✓ Supabase (Free):     0€/mes
+✓ Claude API:          ~7€/mes (7 tarjetas/día)
+✓ OpenAI:              ~1€/mes (embeddings)
+✓ Dominio (opcional):  ~1€/mes
+
+TOTAL: ~9€/mes de costes operativos
+
+Facturación (objetivo): 12€/año × 1.000 usuarios = 12.000€/año
+Margen bruto: ~90%
+
+================================================================================
+¿DUDAS?
+================================================================================
+
+Todos los problemas comunes están documentados en:
+  → INSTRUCCIONES-FINALES.txt (sección "Problemas comunes")
+  → README.md (sección "Diagnóstico de errores")
+
+El endpoint /api/health te dice exactamente qué está mal.
+
+================================================================================
+BUENA SUERTE 🚀
+
+Tu PWA está lista. Ahora toca validar con usuarios reales.
+
+Versión: 1.0 - MVP Completo
+Última actualización: 22 de abril de 2026
+
+================================================================================

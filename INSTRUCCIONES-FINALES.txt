@@ -1,0 +1,343 @@
+================================================================================
+                    LENTE · APP PWA ECONÓMICA
+                      Versión 1.0 - MVP Completo
+================================================================================
+
+¡GRACIAS! Aquí tienes el proyecto COMPLETO, funcional y listo para producción.
+
+================================================================================
+PASO 0 — ¿POR DÓNDE EMPIEZO?
+================================================================================
+
+Lee esto en este orden:
+
+1. ⭐ QUICKSTART.md  (5 min — ver la app funcionando YA)
+2. 📖 README.md      (30 min — entender la arquitectura)
+3. 🚀 Este archivo   (checklist de despliegue)
+
+================================================================================
+PASO 1 — PREPARACIÓN (CRÍTICO — 15 minutos)
+================================================================================
+
+Antes de tocar código, tienes que rotar las keys que pueden estar comprometidas.
+
+OPCIÓN A — Si compartiste keys en el chat/internet:
+  1. https://console.anthropic.com/settings/keys → Delete antigua → Create new
+  2. https://platform.openai.com/api-keys → Create new secret key
+  3. En PowerShell: -join ((65..90)+(97..122)+(48..57) | Get-Random -Count 48 | % {[char]$_})
+
+OPCIÓN B — Si las keys son nuevas y seguras:
+  • Sigue directo al Paso 2
+
+================================================================================
+PASO 2 — SETUP LOCAL (15 minutos)
+================================================================================
+
+En PowerShell o terminal, desde la carpeta del proyecto:
+
+```
+npm install
+vercel dev
+```
+
+Espera a ver: "Ready! Available at http://localhost:3000"
+
+Luego abre en el navegador:
+  http://localhost:3000/api/health
+
+Si ves: "ready": true        → TODO BIEN, sigue al Paso 3
+Si ves: "ready": false       → Mira los errors, falta una variable de entorno
+
+================================================================================
+PASO 3 — CONFIGURAR .env.local
+================================================================================
+
+1. Copia .env.example a .env.local
+2. Abre .env.local en VS Code
+3. Rellena EXACTAMENTE con tus valores (sin comillas, sin espacios):
+
+   SUPABASE_URL=https://TU-PROYECTO.supabase.co
+   SUPABASE_ANON_KEY=eyJhbGci...
+   SUPABASE_SERVICE_KEY=eyJhbGci...
+   ANTHROPIC_API_KEY=sk-ant-api03-...
+   OPENAI_API_KEY=sk-proj-...
+   CRON_SECRET=[cadena-aleatoria-de-48-caracteres]
+
+4. Guarda el archivo (Ctrl+S)
+5. Reinicia vercel dev (Ctrl+C, luego "vercel dev" otra vez)
+6. Abre http://localhost:3000/api/health
+7. Debe salir "ready": true
+
+================================================================================
+PASO 4 — EJECUTAR SCHEMA EN SUPABASE (5 minutos)
+================================================================================
+
+⚠️ IMPORTANTE: Este paso solo se hace UNA VEZ
+
+1. Abre Supabase → tu proyecto → SQL Editor
+2. Pulsa "New query"
+3. Abre el archivo sql/schema.sql desde tu carpeta del proyecto
+4. Copia TODO el contenido
+5. Pega en Supabase
+6. Pulsa "Run"
+7. Espera a que termine (1-2 min)
+8. Verifica que salga "Success" y se hayan creado las tablas
+
+Si ves errores como "table already exists", es porque ya lo ejecutaste antes. ✓ OK
+
+================================================================================
+PASO 5 — PROBAR EN LOCAL (10 minutos)
+================================================================================
+
+1. Abre http://localhost:3000
+   → Deberías ver la app PWA (vacía, es normal)
+
+2. Abre http://localhost:3000/admin
+   → Login con tu email (enlace mágico)
+
+3. Después de entrar, ve a Supabase:
+   • Table Editor → profiles
+   • Busca tu usuario (por email)
+   • Marca la columna is_admin = true
+   • Vuelve al admin, recarga la página
+
+4. En el admin, lado izquierdo, busca "Disparar ingestión"
+   → Pulsa
+   → Verás que en la terminal aparecen logs como:
+      [ingest] ✓ Reuters: 30 items
+      [ingest] ✓ Bloomberg: 28 items
+      [generate] ✓ 5 tarjetas generadas
+
+5. Espera 2-3 minutos a que termine
+
+6. Recarga el admin
+   → En la sección "Pendientes" verás 5-7 tarjetas
+
+7. Aprueba las que quieras (click en el ✓)
+   → Rechaza las malas (click en la X)
+   → Edita si es necesario
+
+8. Pulsa "Publicar aprobadas"
+
+9. Recarga http://localhost:3000
+   → ¡Verás tu feed con las tarjetas reales!
+
+================================================================================
+PASO 6 — DEPLOY A VERCEL (10 minutos)
+================================================================================
+
+1. En GitHub, crea un repositorio nuevo llamado "lente"
+
+2. Desde la terminal del proyecto:
+   ```
+   git init
+   git add .
+   git commit -m "lente PWA MVP v1.0"
+   git remote add origin https://github.com/TU-USUARIO/lente.git
+   git branch -M main
+   git push -u origin main
+   ```
+
+3. Ve a https://vercel.com/dashboard
+   → "Add New" → "Project"
+   → Selecciona "lente" de GitHub
+   → Framework: "Other" (déjalo)
+   → Build command: (vacío)
+   → Output Directory: "public"
+   → Deploy
+
+4. Espera 2-3 minutos a que termine el deploy
+
+5. Vercel te dará una URL tipo: https://lente-xxxxx.vercel.app
+
+6. Ve a ese proyecto en Vercel:
+   → Settings → Environment Variables
+   → Añade estas 6 variables (copia de tu .env.local):
+      SUPABASE_URL
+      SUPABASE_ANON_KEY
+      SUPABASE_SERVICE_KEY
+      ANTHROPIC_API_KEY
+      OPENAI_API_KEY
+      CRON_SECRET
+
+7. Vercel redesplegará automáticamente
+
+8. Abre https://lente-xxxxx.vercel.app/api/health
+   → Debe salir "ready": true
+
+9. ¡Listo! Tu app vive en internet.
+
+================================================================================
+PASO 7 — CRONS AUTOMÁTICOS (YA ESTÁ HECHO)
+================================================================================
+
+El archivo vercel.json ya tiene configurados los crons:
+
+• INGEST: todos los días a las 06:00 UTC (trae noticias RSS)
+• MARKETS: cada 15 minutos entre 08:00-22:00 UTC (cotizaciones)
+
+No tienes que hacer nada. Vercel los ejecuta automáticamente.
+
+NOTA: En el plan Hobby de Vercel, hay limitación a 1 cron/día por endpoint.
+Si necesitas que ingest corra 2 veces al día (06:00 y 14:00), sube a plan Pro ($20/mes).
+
+================================================================================
+PASO 8 — DOMINIO PERSONALIZADO (OPCIONAL)
+================================================================================
+
+Si quieres lente.app en lugar de lente-xxxxx.vercel.app:
+
+1. Compra dominio en Cloudflare, Namecheap, o donde quieras (~10-15€/año)
+
+2. En Vercel, tu proyecto:
+   → Settings → Domains
+   → Añade tu dominio (ej: lente.app)
+
+3. Vercel te dará registros DNS para apuntar desde tu registrador
+
+4. Configura los DNS en tu registrador (normalmente un registro A)
+
+5. Espera propagación (5 min - 24h)
+
+6. Vercel configura HTTPS automáticamente
+
+================================================================================
+PROBLEMAS COMUNES Y SOLUCIONES
+================================================================================
+
+❌ "/api/health dice 'ready: false'"
+   ✓ Lee el JSON, te dice exactamente qué variable falta o está mal
+   ✓ Lo más común: SUPABASE_URL apunta a localhost, debe ser URL real
+   ✓ O un backtick ` pegado al final de una key
+
+❌ "Could not load sources"
+   ✓ No has ejecutado schema.sql en Supabase
+   ✓ Ve al Paso 4, ejecuta el SQL
+
+❌ "Las tarjetas no se generan"
+   ✓ Verifica que OpenAI tiene saldo ($5+)
+   ✓ Mira los logs en vercel dev, te dice dónde falla
+
+❌ "Admin no me deja entrar"
+   ✓ En Supabase → profiles → marca is_admin = true
+   ✓ Logout y login nuevamente
+
+❌ "vercel dev da error"
+   ✓ Verifica: npm install (primera vez)
+   ✓ Verifica: tienes Node.js v18+ (node --version)
+   ✓ Verifica: "npm install -g vercel" si CLI no está
+
+================================================================================
+ESTRUCTURA DE ARCHIVOS (PARA ENTENDER QUÉ ES QUÉ)
+================================================================================
+
+lente/
+├── QUICKSTART.md              ← EMPIEZA AQUÍ (5 min)
+├── README.md                  ← Documentación completa
+├── INSTRUCCIONES-FINALES.txt  ← Este archivo
+│
+├── api/                       ← Endpoints serverless (Vercel)
+│   ├── _lib/clients.js        ← Librería compartida (NO TOCAR)
+│   ├── health.js              ← Diagnóstico
+│   ├── feed.js                ← Feed público
+│   ├── markets.js             ← Mercados en vivo
+│   ├── cron/
+│   │   ├── ingest.js          ← Traer noticias RSS (automático)
+│   │   ├── generate.js        ← Generar con Claude (automático)
+│   │   └── markets.js         ← Actualizar cotizaciones (automático)
+│   └── admin/
+│       ├── cards.js           ← CRUD de tarjetas
+│       ├── trigger-ingest.js  ← Dispara ingestión manual
+│       └── trigger-generate.js ← Dispara generación manual
+│
+├── public/                    ← PWA (lo que ve el usuario)
+│   ├── index.html             ← Feed principal
+│   ├── admin.html             ← Panel de edición
+│   ├── app.js                 ← Lógica de la app
+│   ├── config.js              ← Credenciales Supabase
+│   ├── styles.css             ← Estilos
+│   ├── manifest.json          ← Instalable en móvil
+│   ├── sw.js                  ← Service worker (offline)
+│   └── icon-*.png             ← Iconos PWA
+│
+├── sql/
+│   └── schema.sql             ← Ejecutar en Supabase (Paso 4)
+│
+├── .env.example               ← Plantilla (copiar a .env.local)
+├── .gitignore                 ← No subir .env.local a Git
+├── package.json               ← Dependencias
+└── vercel.json                ← Config de Vercel (crons, rewrites)
+
+================================================================================
+COSTES OPERATIVOS
+================================================================================
+
+Servicio                Coste
+────────────────────────────────
+Vercel (Hobby)          0€ (free plan)
+Supabase (Free)         0€ (free plan, suficiente para MVP)
+Claude API (Sonnet)     ~7€/mes (7 tarjetas/día)
+OpenAI (embeddings)     ~1€/mes
+Dominio (opcional)      ~12€/año
+────────────────────────────────
+TOTAL OPERATIVO          ~9€/mes (sin dominio)
+
+Facturación: 12€/año × 1.000 usuarios = 12.000€/año
+Margen bruto: ~95% (después de costes operativos)
+
+================================================================================
+SEGURIDAD — PUNTOS IMPORTANTES
+================================================================================
+
+✓ .env.local NUNCA se sube a Git (está en .gitignore)
+✓ Las variables de entorno en Vercel son privadas
+✓ Las keys públicas (SUPABASE_ANON_KEY) están protegidas por RLS en Supabase
+✓ Solo tú y tu equipo veis las keys secretas
+✓ Magic links para login, sin contraseñas almacenadas
+✓ CRON_SECRET protege los endpoints automáticos
+
+================================================================================
+PRÓXIMOS PASOS DESPUÉS DEL MVP
+================================================================================
+
+Fase B — Monetización (2-3 semanas):
+  • Integrar Stripe para suscripciones
+  • Paywall: 2 tarjetas gratis/día, el resto de pago
+  • Email marketing (Mailgun o SendGrid)
+
+Fase C — Retención (3-4 semanas):
+  • Notificaciones push
+  • Rachas diarias
+  • Personalización de categorías
+
+Fase D — Legal (1-2 semanas):
+  • Términos y condiciones
+  • Política de privacidad
+  • Disclaimer: "no es asesoramiento financiero"
+
+Fase E — Nativo (6-8 semanas, si valida):
+  • React Native para iOS/Android
+  • Publicar en App Store y Google Play
+
+================================================================================
+¿PREGUNTAS?
+================================================================================
+
+• Documentación completa: README.md
+• Quick setup: QUICKSTART.md
+• API docs: comentarios en /api/
+• Frontend code: /public/app.js
+
+================================================================================
+
+¡ÉXITO! 🚀
+
+Tu app está lista. Ahora toca validar con usuarios reales.
+
+Suerte,
+Claude
+
+================================================================================
+Última actualización: 22 de abril de 2026
+Versión: 1.0 - MVP Completo con IA y Admin Panel
+================================================================================

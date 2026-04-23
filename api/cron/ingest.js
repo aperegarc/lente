@@ -34,6 +34,8 @@ export default async function handler(req, res) {
   }
 
   console.log('[ingest] Starting RSS ingestion...');
+  console.log('[ingest] SUPABASE_URL:', process.env.SUPABASE_URL?.substring(0, 20) + '...');
+  console.log('[ingest] SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY?.substring(0, 20) + '...');
 
   // 1. Obtener fuentes activas
   const { data: sources, error: srcErr } = await supabase
@@ -88,12 +90,17 @@ export default async function handler(req, res) {
         continue;
       }
 
+      console.log(`[ingest] Intentando upsert de ${rows.length} items para ${source.name}...`);
       const { error: insErr, count } = await supabase
         .from('articles')
         .upsert(rows, { onConflict: 'link', ignoreDuplicates: true, count: 'exact' });
 
-      if (insErr) throw insErr;
+      if (insErr) {
+        console.error(`[ingest] ✗ Upsert error para ${source.name}:`, insErr);
+        throw insErr;
+      }
 
+      console.log(`[ingest] ✓ Upsert completado: ${rows.length} items enviados, count=${count}`);
       results.articles_new += count || 0;
       results.sources_processed++;
       console.log(`[ingest] ✓ ${source.name}: ${rows.length} items, ${count || 0} nuevos`);
@@ -103,21 +110,29 @@ export default async function handler(req, res) {
     }
   }
 
-  // 3. Encadenar con generación automáticamente
+  // 3. Encadenar con generate — ✅ await para que Vercel no mate el proceso
   const deploymentUrl = getDeploymentUrl(req);
   const nextUrl = `${deploymentUrl}/api/cron/generate`;
 
-  // Fire-and-forget: no bloqueamos la respuesta esperando a generate
-  fetch(nextUrl, {
-    headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
-  }).catch(err => {
-    console.error('[ingest] Could not chain to /generate:', err.message);
-  });
+  console.log('[ingest] Encadenando con generate...');
+  try {
+    const genResponse = await fetch(nextUrl, {
+      headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+    });
+    const genData = await genResponse.json();
+    console.log(`[ingest] generate respondió (${genResponse.status}):`, genData);
 
-  console.log(`[ingest] Done. ${results.articles_new} new articles across ${results.sources_processed} sources`);
-  return res.status(200).json({
-    ok: true,
-    ...results,
-    next_step: 'generate triggered',
-  });
+    return res.status(200).json({
+      ok: true,
+      ...results,
+      generate: genData,
+    });
+  } catch (err) {
+    console.error('[ingest] Error llamando a generate:', err.message);
+    return res.status(200).json({
+      ok: true,
+      ...results,
+      generate_error: err.message,
+    });
+  }
 }

@@ -450,7 +450,7 @@ async function loadSavedCards() {
     state.savedIds = new Set(JSON.parse(localStorage.getItem('lente.saved') || '[]'));
     return;
   }
-  const { data } = await supabase
+  const { data } = await supabaseClient
     .from('saved_cards')
     .select('card_id')
     .eq('user_id', state.session.user.id);
