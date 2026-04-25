@@ -898,3 +898,70 @@ html, body {
   border-color: var(--ink-muted);
   color: var(--ink);
 }
+
+/* ===== Install prompt ===== */
+.install-prompt {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  z-index: 1000;
+  transform: translateY(120%);
+  transition: transform 0.3s ease;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.install-prompt.show {
+  transform: translateY(0);
+}
+
+.install-prompt > div {
+  flex: 1;
+}
+
+.install-prompt strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.install-prompt p {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin: 0;
+}
+
+.btn-install {
+  background: var(--accent);
+  color: var(--surface);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-install:hover {
+  opacity: 0.9;
+}
+
+.install-prompt .icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 18px;
+}
