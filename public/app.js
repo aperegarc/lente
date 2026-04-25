@@ -4,7 +4,43 @@
 // ============================================================
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Inicializar Supabase con retry en caso de que no esté listo
+let supabaseClient = null;
+let supabaseReady = false;
+
+function initSupabase() {
+  if (window.supabase && !supabaseClient) {
+    try {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      supabaseReady = true;
+      console.log('✓ Supabase inicializado correctamente');
+    } catch (err) {
+      console.error('Error inicializando Supabase:', err);
+      setTimeout(initSupabase, 100);
+    }
+  } else if (!window.supabase) {
+    setTimeout(initSupabase, 100);
+  }
+}
+
+// Iniciar en cuanto esté disponible
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSupabase);
+} else {
+  initSupabase();
+}
+
+// Esperar a que Supabase esté listo antes de cualquier operación
+async function waitForSupabase() {
+  let retries = 0;
+  while (!supabaseReady && retries < 100) {
+    await new Promise(r => setTimeout(r, 50));
+    retries++;
+  }
+  if (!supabaseReady) throw new Error('Supabase no se pudo inicializar');
+  return supabaseClient;
+}
 
 const CATEGORY_COLORS = {
   'Política monetaria': '',
@@ -118,6 +154,7 @@ async function loadFeed() {
   list.innerHTML = `<div class="loading">Cargando resumen del día...</div>`;
 
   try {
+    await waitForSupabase();
     const res = await fetch(API.feed);
     const data = await res.json();
     state.feed = data;
@@ -206,7 +243,9 @@ function renderFeed(filterCategory = null) {
       <div class="intro-label">Fin del resumen</div>
       <h2 class="headline" style="text-align:center;">Has leído las <em>${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}</em> de hoy.</h2>
       <p class="deck" style="text-align:center;">Vuelve mañana a las 7:30.</p>
-      <button class="cta" onclick="openProfile()">Activar recordatorio diario</button>
+      <button class="cta" id="reminder-btn" onclick="toggleDailyReminder()">
+        Activar recordatorio diario
+      </button>
     </section>
   `;
 
@@ -273,6 +312,7 @@ async function loadMarkets() {
   list.innerHTML = `<div class="loading">Cargando mercados...</div>`;
 
   try {
+    await waitForSupabase();
     const res = await fetch(API.markets);
     state.markets = await res.json();
     renderMarkets();
@@ -407,6 +447,8 @@ function filterByTopic(topic) {
 // GUARDADOS
 // ============================================================
 async function loadSavedCards() {
+  await waitForSupabase();
+  
   if (!state.session) {
     // Guest: localStorage
     state.savedIds = new Set(JSON.parse(localStorage.getItem('lente.saved') || '[]'));
@@ -420,6 +462,8 @@ async function loadSavedCards() {
 }
 
 async function toggleSave(cardId, btn) {
+  await waitForSupabase();
+  
   const saved = state.savedIds.has(cardId);
 
   if (saved) {
@@ -546,7 +590,7 @@ function openLoginModal() {
   showTab('login');
 }
 
-async function openProfile() {
+function openProfile() {
   if (state.session) {
     // Mostrar modal de perfil con info del plan
     renderProfileModal();
@@ -598,14 +642,73 @@ function renderProfileModal() {
 }
 
 async function signOut() {
-  await supabaseClient.auth.signOut();
-  $('profile-modal')?.classList.remove('open');
-  state.session = null;
-  state.profile = null;
-  updateProfileBtn();
-  toast('Sesión cerrada');
-  // Limpiar guardados de BD, mostrar los locales
-  state.savedIds = new Set(JSON.parse(localStorage.getItem('lente.saved') || '[]'));
+  try {
+    await waitForSupabase();
+
+    // Cerrar sesión en Supabase
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) throw error;
+
+    // Limpiar UI
+    $('profile-modal')?.classList.remove('open');
+
+    // Limpiar estado
+    state.session = null;
+    state.profile = null;
+    state.feed = { date: null, cards: [] };
+
+    // Limpiar localStorage
+    localStorage.removeItem('supabase.auth.token');
+    localStorage.removeItem('supabase.auth.refreshToken');
+
+    // Actualizar UI
+    updateProfileBtn();
+    toast('Sesión cerrada ✓');
+
+    // Recargar para que se limpie todo
+    setTimeout(() => {
+      window.location.reload();
+    }, 800);
+  } catch (err) {
+    console.error('Error cerrando sesión:', err);
+    toast('Error al cerrar sesión');
+  }
+}
+
+async function toggleDailyReminder() {
+  try {
+    await waitForSupabase();
+    
+    if (!state.session) {
+      openLoginModal();
+      return;
+    }
+
+    const btn = $('reminder-btn');
+    const isEnabled = state.profile?.daily_reminder_enabled;
+
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .update({ daily_reminder_enabled: !isEnabled })
+      .eq('id', state.session.user.id);
+
+    if (error) throw error;
+
+    state.profile.daily_reminder_enabled = !isEnabled;
+    
+    if (!isEnabled) {
+      btn.textContent = '✓ Recordatorio activado';
+      btn.style.background = 'rgba(201, 169, 97, 0.2)';
+      toast('Recordatorios activados ✓');
+    } else {
+      btn.textContent = 'Activar recordatorio diario';
+      btn.style.background = '';
+      toast('Recordatorios desactivados');
+    }
+  } catch (err) {
+    console.error('Error toggle reminder:', err);
+    toast('Error al actualizar recordatorio');
+  }
 }
 
 function closeLogin() {
@@ -632,48 +735,79 @@ function showTab(mode) {
 }
 
 async function submitLogin() {
-  const email = $('login-email').value.trim();
-  const password = $('login-password').value;
-  const status = $('login-status');
+  try {
+    await waitForSupabase();
 
-  if (!email.includes('@')) {
-    status.textContent = 'Email inválido';
-    status.className = 'login-status error';
-    return;
-  }
-  if (!password || password.length < 6) {
-    status.textContent = 'La contraseña debe tener al menos 6 caracteres';
-    status.className = 'login-status error';
-    return;
-  }
+    const email = $('login-email').value.trim();
+    const password = $('login-password').value;
+    const status = $('login-status');
 
-  status.textContent = loginMode === 'login' ? 'Iniciando sesión...' : 'Creando cuenta...';
-  status.className = 'login-status';
-
-  if (loginMode === 'register') {
-    const { error } = await supabaseClient.auth.signUp({ email, password });
-    if (error) {
-      status.textContent = error.message;
+    // Validación
+    if (!email.includes('@')) {
+      status.textContent = 'Email inválido';
       status.className = 'login-status error';
-    } else {
-      status.textContent = '¡Cuenta creada! Revisa tu email para confirmarla.';
-      status.className = 'login-status success';
-      showTab('login');
+      return;
     }
-  } else {
-    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if (error) {
-      status.textContent = error.message;
+
+    if (!password || password.length < 6) {
+      status.textContent = 'Mínimo 6 caracteres';
       status.className = 'login-status error';
-    } else {
-      closeLogin();
-      toast('Sesión iniciada ✓');
+      return;
     }
+
+    status.textContent = loginMode === 'login' ? 'Iniciando sesión...' : 'Creando cuenta...';
+    status.className = 'login-status';
+
+    if (loginMode === 'register') {
+      // Crear cuenta
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (error) {
+        status.textContent = error.message || 'Error creando cuenta';
+        status.className = 'login-status error';
+      } else if (data?.user) {
+        status.textContent = '✓ Cuenta creada. Revisa tu email';
+        status.className = 'login-status success';
+        $('login-email').value = '';
+        $('login-password').value = '';
+        setTimeout(() => showTab('login'), 1500);
+      }
+    } else {
+      // Loguear
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        status.textContent = error.message || 'Error iniciando sesión';
+        status.className = 'login-status error';
+      } else if (data?.session) {
+        status.textContent = '✓ Sesión iniciada';
+        status.className = 'login-status success';
+        setTimeout(() => {
+          closeLogin();
+          toast('¡Bienvenido! ✓');
+        }, 500);
+      }
+    }
+  } catch (err) {
+    console.error('Error en submitLogin:', err);
+    $('login-status').textContent = 'Error: ' + (err.message || 'desconocido');
+    $('login-status').className = 'login-status error';
   }
 }
 
 // Cargar perfil del usuario desde Supabase
 async function loadProfile(userId) {
+  await waitForSupabase();
+  
   const { data } = await supabaseClient
     .from('profiles')
     .select('plan, plan_expires_at, is_admin')
@@ -695,20 +829,33 @@ function updateProfileBtn() {
   }
 }
 
-supabaseClient.auth.onAuthStateChange(async (_event, session) => {
-  state.session = session;
-  if (session) {
-    await loadProfile(session.user.id);
-  } else {
-    state.profile = null;
-  }
-  updateProfileBtn();
-  await loadSavedCards();
-  // Re-render saved si está activa
-  if (state.currentScreen === 'saved') renderSaved();
-});
+async function setupAuthListener() {
+  await waitForSupabase();
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    state.session = session;
+    if (session) {
+      try {
+        await loadProfile(session.user.id);
+      } catch (err) {
+        console.error('Error cargando perfil:', err);
+      }
+    } else {
+      state.profile = null;
+    }
+    updateProfileBtn();
+  });
+}
+
+// Iniciar listener cuando esté listo
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupAuthListener);
+} else {
+  setupAuthListener();
+}
 
 async function refreshSession() {
+  await waitForSupabase();
+  
   const { data: { session } } = await supabaseClient.auth.getSession();
   state.session = session;
   if (session) await loadProfile(session.user.id);
