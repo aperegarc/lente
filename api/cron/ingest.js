@@ -1,6 +1,5 @@
 // ============================================================
 // /api/cron/ingest.js
-// Ingestión RSS — se ejecuta vía Vercel Cron + trigger manual
 // ============================================================
 
 import Parser from 'rss-parser';
@@ -34,8 +33,6 @@ export default async function handler(req, res) {
   }
 
   console.log('[ingest] Starting RSS ingestion...');
-  console.log('[ingest] SUPABASE_URL:', process.env.SUPABASE_URL?.substring(0, 20) + '...');
-  console.log('[ingest] SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY?.substring(0, 20) + '...');
 
   // 1. Obtener fuentes activas
   const { data: sources, error: srcErr } = await supabase
@@ -47,7 +44,7 @@ export default async function handler(req, res) {
     console.error('[ingest] Could not load sources:', srcErr);
     return res.status(500).json({
       error: 'Could not load sources',
-      hint: '¿Has ejecutado schema.sql en Supabase? Comprueba que existe la tabla "sources" con filas',
+      hint: '¿Has ejecutado schema.sql en Supabase? Comprueba que existe la tabla "sources"',
       details: srcErr.message,
     });
   }
@@ -59,11 +56,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const results = {
-    sources_processed: 0,
-    articles_new: 0,
-    errors: [],
-  };
+  const results = { sources_processed: 0, articles_new: 0, errors: [] };
 
   // 2. Procesar cada fuente
   for (const source of sources) {
@@ -71,9 +64,7 @@ export default async function handler(req, res) {
       console.log(`[ingest] Fetching ${source.name}...`);
       const feed = await parser.parseURL(source.url);
 
-      const items = (feed.items || [])
-        .filter(isRelevant)
-        .slice(0, 30);
+      const items = (feed.items || []).filter(isRelevant).slice(0, 30);
 
       const rows = items.map(item => ({
         source_id: source.id,
@@ -90,17 +81,12 @@ export default async function handler(req, res) {
         continue;
       }
 
-      console.log(`[ingest] Intentando upsert de ${rows.length} items para ${source.name}...`);
       const { error: insErr, count } = await supabase
         .from('articles')
         .upsert(rows, { onConflict: 'link', ignoreDuplicates: true, count: 'exact' });
 
-      if (insErr) {
-        console.error(`[ingest] ✗ Upsert error para ${source.name}:`, insErr);
-        throw insErr;
-      }
+      if (insErr) throw insErr;
 
-      console.log(`[ingest] ✓ Upsert completado: ${rows.length} items enviados, count=${count}`);
       results.articles_new += count || 0;
       results.sources_processed++;
       console.log(`[ingest] ✓ ${source.name}: ${rows.length} items, ${count || 0} nuevos`);
@@ -110,11 +96,10 @@ export default async function handler(req, res) {
     }
   }
 
-  // 3. Encadenar con generate — ✅ await para que Vercel no mate el proceso
-  const deploymentUrl = getDeploymentUrl(req);
-  const nextUrl = `${deploymentUrl}/api/cron/generate`;
-
+  // 3. Encadenar con generate — await para que Vercel no mate el proceso
+  const nextUrl = `${getDeploymentUrl(req)}/api/cron/generate`;
   console.log('[ingest] Encadenando con generate...');
+
   try {
     const genResponse = await fetch(nextUrl, {
       headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
@@ -122,17 +107,9 @@ export default async function handler(req, res) {
     const genData = await genResponse.json();
     console.log(`[ingest] generate respondió (${genResponse.status}):`, genData);
 
-    return res.status(200).json({
-      ok: true,
-      ...results,
-      generate: genData,
-    });
+    return res.status(200).json({ ok: true, ...results, generate: genData });
   } catch (err) {
     console.error('[ingest] Error llamando a generate:', err.message);
-    return res.status(200).json({
-      ok: true,
-      ...results,
-      generate_error: err.message,
-    });
+    return res.status(200).json({ ok: true, ...results, generate_error: err.message });
   }
 }

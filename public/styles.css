@@ -10,6 +10,8 @@
   --bg-card: #141414;
   --bg-elevated: #1c1c1c;
   --bg-hover: #222;
+  --surface: #141414;
+  --surface-2: #1c1c1c;
   --ink: #f5f2ea;
   --ink-dim: #9a958b;
   --ink-muted: #5c5852;
@@ -863,3 +865,36 @@ html, body {
   text-transform: uppercase;
 }
 .read-more-btn:hover { opacity: 0.8; }
+
+/* ===== Login status success ===== */
+.login-status.success { color: var(--green); }
+
+/* ===== Profile button — estado premium ===== */
+.profile-btn.is-premium {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(201, 169, 97, 0.3);
+}
+
+/* ===== Modal de perfil ===== */
+#profile-modal .modal-body {
+  min-height: 180px;
+}
+
+/* ===== Botón secundario (cerrar sesión) ===== */
+.btn-secondary {
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  margin-top: 8px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-secondary:hover {
+  border-color: var(--ink-muted);
+  color: var(--ink);
+}

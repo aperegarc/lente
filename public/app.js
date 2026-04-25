@@ -1,14 +1,11 @@
 // ============================================================
 // /public/app.js
-// Cliente PWA · router + render + auth
+// Cliente PWA · router + render + auth + planes de usuario
 // ============================================================
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
-
-// Cliente Supabase
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Paleta → color para categorías
 const CATEGORY_COLORS = {
   'Política monetaria': '',
   'Materias primas': 'green',
@@ -33,16 +30,32 @@ const MARKET_CATEGORIES = {
 };
 
 // ============================================================
-// ESTADO
+// ESTADO — incluye plan del usuario
 // ============================================================
 const state = {
   session: null,
+  profile: null,        // { plan: 'free'|'premium', is_admin: bool, ... }
   feed: { date: null, cards: [] },
   markets: { grouped: {}, flat: [], updated_at: null },
   savedIds: new Set(),
   currentScreen: 'today',
   currentMarketTab: 'all',
 };
+
+// Helper: ¿el usuario actual tiene plan premium?
+function isPremium() {
+  if (!state.session) return false;
+  const plan = state.profile?.plan;
+  const expires = state.profile?.plan_expires_at;
+  if (plan !== 'premium') return false;
+  if (expires && new Date(expires) < new Date()) return false;
+  return true;
+}
+
+// Helper: ¿está logueado?
+function isLoggedIn() {
+  return !!state.session;
+}
 
 // ============================================================
 // UTILIDADES
@@ -55,26 +68,6 @@ function toast(msg, ms = 2200) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), ms);
-}
-
-async function checkCacheVersion() {
-  try {
-    const res = await fetch('/api/feed'); // reutilizamos cualquier endpoint
-    const stored = localStorage.getItem('lente.cache_version');
-    
-    const { data } = await supabaseClient
-      .from('app_config')
-      .select('value')
-      .eq('key', 'cache_version')
-      .single();
-
-    if (data && data.value !== stored) {
-      localStorage.setItem('lente.cache_version', data.value);
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage('CLEAR_CACHE');
-      }
-    }
-  } catch { /* silencioso */ }
 }
 
 function fmtDate(iso) {
@@ -108,16 +101,9 @@ function switchScreen(name) {
   $(`screen-${name}`)?.classList.add('active');
   document.querySelector(`.nav-item[data-screen="${name}"]`)?.classList.add('active');
 
-  // Cargar data on-demand
-  if (name === 'markets' && state.markets.flat.length === 0) {
-    loadMarkets();
-  }
-  if (name === 'topics' && !state._topicsRendered) {
-    renderTopics();
-  }
-  if (name === 'saved') {
-    renderSaved();
-  }
+  if (name === 'markets' && state.markets.flat.length === 0) loadMarkets();
+  if (name === 'topics' && !state._topicsRendered) renderTopics();
+  if (name === 'saved') renderSaved();
 }
 
 $$('.nav-item').forEach(n => {
@@ -148,14 +134,12 @@ function toggleReadMore(id) {
   btn.textContent = collapsed ? 'Leer más ↓' : 'Leer menos ↑';
 }
 
-
 function renderFeed(filterCategory = null) {
   const list = $('feed-list');
   const cards = filterCategory
     ? state.feed.cards.filter(c => c.category === filterCategory)
     : state.feed.cards;
 
-  // Etiqueta de fecha
   $('date-label').textContent = fmtDate(state.feed.date);
   $('edition-label').textContent = filterCategory ? `Filtro · ${filterCategory}` : 'Edición del día';
 
@@ -163,7 +147,7 @@ function renderFeed(filterCategory = null) {
     list.innerHTML = `
       <div class="empty-state">
         <h2>${filterCategory ? `Sin noticias de ${filterCategory}` : 'Sin contenido todavía'}</h2>
-        <p>${filterCategory ? 'Prueba con otro ámbito o vuelve a la portada.' : 'El pipeline aún no ha publicado la edición de hoy. Vuelve pronto.'}</p>
+        <p>${filterCategory ? 'Prueba con otro ámbito.' : 'El pipeline aún no ha publicado la edición de hoy. Vuelve pronto.'}</p>
       </div>
     `;
     return;
@@ -175,7 +159,7 @@ function renderFeed(filterCategory = null) {
     <section class="card card-intro">
       <div class="intro-label">${filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día'}</div>
       <h1 class="intro-title">${filterCategory ? `<em>${filterCategory}</em>` : 'Buenos días.'}</h1>
-      <p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura. Todo explicado para entender el mundo en un minuto por historia.</p>
+      <p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p>
       <div class="intro-stats">
         <div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div>
         <div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura total</div></div>
@@ -196,8 +180,8 @@ function renderFeed(filterCategory = null) {
         <h2 class="headline">${c.headline}</h2>
         <p class="deck">${c.deck}</p>
         <div class="section-label">Qué ha pasado</div>
-          <p class="body-text collapsed" id="body-${c.id}">${c.body}</p>
-          <button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button>
+        <p class="body-text collapsed" id="body-${c.id}">${c.body}</p>
+        <button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button>
         <div class="meaning-box">
           <div class="section-label">¿Qué significa para ti?</div>
           <p class="meaning-text">${c.meaning}</p>
@@ -238,7 +222,6 @@ function renderFeed(filterCategory = null) {
     progress.appendChild(bar);
   });
   const bars = progress.querySelectorAll('.progress-bar');
-
   const screen = $('screen-today');
   screen.addEventListener('scroll', () => {
     const scrollTop = screen.scrollTop;
@@ -261,16 +244,12 @@ function renderFeed(filterCategory = null) {
 // ============================================================
 function renderTicker() {
   const t = $('ticker');
-  // Filtramos unos cuantos mercados populares para la cabecera
   const popular = ['^IBEX', '^GSPC', 'GC=F', 'BTC-USD', 'EURUSD=X', 'BZ=F'];
   const items = popular
     .map(sym => state.markets.flat.find(m => m.symbol === sym))
     .filter(Boolean);
 
-  if (items.length === 0) {
-    t.innerHTML = '';
-    return;
-  }
+  if (items.length === 0) { t.innerHTML = ''; return; }
 
   t.innerHTML = items.map(m => {
     const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
@@ -307,7 +286,6 @@ function renderMarkets() {
   const tabs = $('market-tabs');
   const list = $('markets-list');
 
-  // Tabs
   const cats = Object.keys(state.markets.grouped);
   tabs.innerHTML = `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>`
     + cats.map(cat => `
@@ -316,7 +294,6 @@ function renderMarkets() {
       </div>
     `).join('');
 
-  // Items
   const groups = state.currentMarketTab === 'all'
     ? state.markets.grouped
     : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
@@ -339,8 +316,7 @@ function renderMarketItem(m) {
   const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
   const sparkColor = m.change_pct > 0 ? '#6fae5f' : m.change_pct < 0 ? '#d66a5c' : '#9a958b';
   const spark = Array.isArray(m.sparkline) && m.sparkline.length > 0
-    ? buildSparkline(m.sparkline, sparkColor)
-    : '';
+    ? buildSparkline(m.sparkline, sparkColor) : '';
   const prefix = m.symbol?.includes('=F') ? '$' : '';
   const priceDigits = m.price > 1000 ? 0 : m.symbol?.includes('EUR') ? 4 : 2;
 
@@ -382,7 +358,7 @@ function setMarketTab(tab) {
 // ÁMBITOS
 // ============================================================
 const TOPICS = [
-  { key: 'Macro', name: 'Macro­economía', icon: 'M', featured: true },
+  { key: 'Macro', name: 'Macroecon­omía', icon: 'M', featured: true },
   { key: 'Bolsa', name: 'Bolsa y acciones', icon: 'B' },
   { key: 'Inmobiliario', name: 'Inmobi­liario', icon: 'I' },
   { key: 'Cripto', name: 'Cripto y blockchain', icon: '₿' },
@@ -395,13 +371,8 @@ const TOPICS = [
 
 function renderTopics() {
   const grid = $('topics-grid');
-
-  // Contar noticias por topic
   const counts = {};
-  for (const c of state.feed.cards) {
-    counts[c.category] = (counts[c.category] || 0) + 1;
-  }
-  // También contamos aproximado por palabras clave
+  for (const c of state.feed.cards) counts[c.category] = (counts[c.category] || 0) + 1;
   const aliasMap = {
     'Macro': ['Macro', 'Macro Europa', 'Política monetaria'],
     'Energía': ['Energía', 'Materias primas'],
@@ -410,12 +381,11 @@ function renderTopics() {
   grid.innerHTML = TOPICS.map(t => {
     const aliases = aliasMap[t.key] || [t.key];
     const count = aliases.reduce((a, al) => a + (counts[al] || 0), 0);
-    const featured = t.featured ? 'featured' : '';
     return `
-      <div class="ambito-card ${featured}" onclick="filterByTopic('${t.key}')">
+      <div class="ambito-card ${t.featured ? 'featured' : ''}" onclick="filterByTopic('${t.key}')">
         <div class="ambito-icon">${t.icon}</div>
         <div class="ambito-name">${t.name}</div>
-        <div class="ambito-meta">${count} ${count === 1 ? 'hoy' : 'hoy'}</div>
+        <div class="ambito-meta">${count} hoy</div>
       </div>
     `;
   }).join('');
@@ -424,20 +394,11 @@ function renderTopics() {
 }
 
 function filterByTopic(topic) {
-  // Buscar la categoría que mejor matchea
   const matching = state.feed.cards.filter(c =>
-    c.category === topic ||
-    c.category.toLowerCase().includes(topic.toLowerCase())
+    c.category === topic || c.category.toLowerCase().includes(topic.toLowerCase())
   );
-
-  if (matching.length === 0) {
-    toast(`Sin noticias de ${topic} hoy`);
-    return;
-  }
-
-  // Guardamos el filtro y cambiamos de pantalla
+  if (matching.length === 0) { toast(`Sin noticias de ${topic} hoy`); return; }
   switchScreen('today');
-  // Re-render con filtro usando la categoría real de la primera coincidencia
   renderFeed(matching[0].category);
   $('screen-today').scrollTop = 0;
 }
@@ -447,6 +408,7 @@ function filterByTopic(topic) {
 // ============================================================
 async function loadSavedCards() {
   if (!state.session) {
+    // Guest: localStorage
     state.savedIds = new Set(JSON.parse(localStorage.getItem('lente.saved') || '[]'));
     return;
   }
@@ -459,6 +421,7 @@ async function loadSavedCards() {
 
 async function toggleSave(cardId, btn) {
   const saved = state.savedIds.has(cardId);
+
   if (saved) {
     state.savedIds.delete(cardId);
     btn?.classList.remove('saved');
@@ -468,16 +431,25 @@ async function toggleSave(cardId, btn) {
   }
 
   if (state.session) {
+    // Usuario logueado: sincronizar con BD
     if (saved) {
       await supabaseClient.from('saved_cards').delete()
         .match({ user_id: state.session.user.id, card_id: cardId });
     } else {
-      await supabaseClient.from('saved_cards').insert({
+      const { error } = await supabaseClient.from('saved_cards').insert({
         user_id: state.session.user.id,
         card_id: cardId,
       });
+      if (error) {
+        // Revertir si falla
+        state.savedIds.delete(cardId);
+        btn?.classList.remove('saved');
+        toast('Error al guardar. Inténtalo de nuevo.');
+        return;
+      }
     }
   } else {
+    // Guest: localStorage
     localStorage.setItem('lente.saved', JSON.stringify([...state.savedIds]));
   }
 
@@ -488,6 +460,23 @@ function renderSaved() {
   const list = $('saved-list');
   const saved = state.feed.cards.filter(c => state.savedIds.has(c.id));
 
+  if (!isLoggedIn()) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <h2>Inicia sesión para guardar</h2>
+        <p>Crea una cuenta gratuita para guardar tarjetas y acceder desde cualquier dispositivo.</p>
+        <button class="cta" style="margin-top:16px;" onclick="openLoginModal()">Crear cuenta gratis</button>
+      </div>
+    `;
+    // Si hay guardados locales, mostrarlos igual
+    if (state.savedIds.size > 0) renderSavedCards(list, saved, true);
+    return;
+  }
+
+  renderSavedCards(list, saved, false);
+}
+
+function renderSavedCards(list, saved, isGuest) {
   if (saved.length === 0) {
     list.innerHTML = `
       <div class="empty-state">
@@ -531,15 +520,12 @@ function renderSaved() {
 async function shareCard(id) {
   const card = state.feed.cards.find(c => c.id === id);
   if (!card) return;
-
   const plain = card.headline.replace(/<[^>]+>/g, '');
   const text = `${plain}\n\n${card.deck}\n\nLeído en lente`;
   const url = `${location.origin}/?card=${id}`;
 
   if (navigator.share) {
-    try {
-      await navigator.share({ title: plain, text, url });
-    } catch { /* usuario canceló */ }
+    try { await navigator.share({ title: plain, text, url }); } catch { /* cancelado */ }
   } else {
     await navigator.clipboard.writeText(`${text}\n${url}`);
     toast('Enlace copiado');
@@ -547,30 +533,87 @@ async function shareCard(id) {
 }
 
 // ============================================================
-// AUTH
+// AUTH — Modal de perfil mejorado con info de plan
 // ============================================================
-
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data === 'RELOAD') {
-      window.location.reload();
-    }
+    if (event.data === 'RELOAD') window.location.reload();
   });
+}
+
+function openLoginModal() {
+  $('login-modal').classList.add('open');
+  showTab('login');
 }
 
 async function openProfile() {
   if (state.session) {
-    if (confirm(`Sesión iniciada como ${state.session.user.email}. ¿Cerrar sesión?`)) {
-      await supabaseClient.auth.signOut();
-      location.reload();
-    }
+    // Mostrar modal de perfil con info del plan
+    renderProfileModal();
+    $('profile-modal').classList.add('open');
   } else {
-    $('login-modal').classList.add('open');
+    openLoginModal();
   }
+}
+
+function renderProfileModal() {
+  const modal = $('profile-modal-body');
+  if (!modal) return;
+
+  const email = state.session?.user?.email || '';
+  const plan = state.profile?.plan || 'free';
+  const expires = state.profile?.plan_expires_at;
+  const isPrem = isPremium();
+
+  const planBadge = isPrem
+    ? `<span style="background:#2a6b3a;color:#7fd89a;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;">Premium</span>`
+    : `<span style="background:#2a2a2a;color:#9a958b;padding:3px 10px;border-radius:20px;font-size:12px;">Free</span>`;
+
+  const expiresText = isPrem && expires
+    ? `<p style="font-size:12px;color:var(--ink-dim);margin:4px 0 0;">Válido hasta ${new Date(expires).toLocaleDateString('es-ES')}</p>`
+    : '';
+
+  modal.innerHTML = `
+    <div style="text-align:center;padding:8px 0 20px;">
+      <div style="width:56px;height:56px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;margin:0 auto 12px;">
+        ${email[0]?.toUpperCase() || '?'}
+      </div>
+      <div style="font-size:15px;font-weight:500;color:var(--ink);">${email}</div>
+      <div style="margin-top:8px;">${planBadge}</div>
+      ${expiresText}
+    </div>
+
+    ${!isPrem ? `
+    <div style="background:var(--surface-2);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
+      <div style="font-size:14px;font-weight:500;margin-bottom:6px;">lente Premium</div>
+      <div style="font-size:12px;color:var(--ink-dim);margin-bottom:12px;">Historial completo · Alertas · Sin límites</div>
+      <button class="cta" style="width:100%;opacity:0.5;cursor:not-allowed;" disabled>Próximamente</button>
+    </div>
+    ` : ''}
+
+    <button class="cta" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);" onclick="signOut()">
+      Cerrar sesión
+    </button>
+  `;
+}
+
+async function signOut() {
+  await supabaseClient.auth.signOut();
+  $('profile-modal')?.classList.remove('open');
+  state.session = null;
+  state.profile = null;
+  updateProfileBtn();
+  toast('Sesión cerrada');
+  // Limpiar guardados de BD, mostrar los locales
+  state.savedIds = new Set(JSON.parse(localStorage.getItem('lente.saved') || '[]'));
 }
 
 function closeLogin() {
   $('login-modal').classList.remove('open');
+}
+
+function closeProfileModal() {
+  $('profile-modal')?.classList.remove('open');
 }
 
 let loginMode = 'login';
@@ -587,7 +630,6 @@ function showTab(mode) {
   $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
   $('login-status').textContent = '';
 }
-
 
 async function submitLogin() {
   const email = $('login-email').value.trim();
@@ -614,7 +656,8 @@ async function submitLogin() {
       status.textContent = error.message;
       status.className = 'login-status error';
     } else {
-      status.textContent = '¡Cuenta creada! Ya puedes entrar.';
+      status.textContent = '¡Cuenta creada! Revisa tu email para confirmarla.';
+      status.className = 'login-status success';
       showTab('login');
     }
   } else {
@@ -629,21 +672,48 @@ async function submitLogin() {
   }
 }
 
-async function refreshSession() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  state.session = session;
-  if (session) {
-    $('profile-btn').textContent = session.user.email[0].toUpperCase();
+// Cargar perfil del usuario desde Supabase
+async function loadProfile(userId) {
+  const { data } = await supabaseClient
+    .from('profiles')
+    .select('plan, plan_expires_at, is_admin')
+    .eq('id', userId)
+    .single();
+
+  state.profile = data || { plan: 'free', is_admin: false };
+}
+
+function updateProfileBtn() {
+  const btn = $('profile-btn');
+  if (!btn) return;
+  if (state.session) {
+    btn.textContent = state.session.user.email[0].toUpperCase();
+    btn.classList.toggle('is-premium', isPremium());
   } else {
-    $('profile-btn').textContent = '?';
+    btn.textContent = '?';
+    btn.classList.remove('is-premium');
   }
 }
 
-supabaseClient.auth.onAuthStateChange((_event, session) => {
+supabaseClient.auth.onAuthStateChange(async (_event, session) => {
   state.session = session;
-  refreshSession();
-  loadSavedCards();
+  if (session) {
+    await loadProfile(session.user.id);
+  } else {
+    state.profile = null;
+  }
+  updateProfileBtn();
+  await loadSavedCards();
+  // Re-render saved si está activa
+  if (state.currentScreen === 'saved') renderSaved();
 });
+
+async function refreshSession() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  state.session = session;
+  if (session) await loadProfile(session.user.id);
+  updateProfileBtn();
+}
 
 // ============================================================
 // PWA INSTALL
@@ -652,7 +722,6 @@ let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  // Mostrar prompt propio solo si no lo ha desestimado ya
   if (!localStorage.getItem('lente.install.dismissed')) {
     setTimeout(() => $('install-prompt').classList.add('show'), 3000);
   }
@@ -678,9 +747,8 @@ function dismissInstall() {
 async function init() {
   await refreshSession();
   await loadSavedCards();
-  await loadMarkets();   // para el ticker
+  await loadMarkets();
   await loadFeed();
-  await checkCacheVersion();
 }
 
 init();

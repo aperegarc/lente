@@ -62,10 +62,7 @@ function clusterArticles(articles, threshold = 0.78) {
           / matched.articles.length;
       }
     } else {
-      clusters.push({
-        centroid: [...emb],
-        articles: [{ ...art, embedding: emb }],
-      });
+      clusters.push({ centroid: [...emb], articles: [{ ...art, embedding: emb }] });
     }
   }
   return clusters;
@@ -98,10 +95,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'VOYAGE_API_KEY no configurada' });
   }
   if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY.includes('...')) {
-    return res.status(500).json({
-      error: 'ANTHROPIC_API_KEY no configurada',
-      hint: 'Consigue una key en https://console.anthropic.com/settings/keys',
-    });
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY no configurada' });
   }
 
   let supabase, claude;
@@ -115,7 +109,7 @@ export default async function handler(req, res) {
   console.log('[generate] Starting generation pipeline...');
 
   // ============================================================
-  // 1. Artículos sin embedding — SIN filtro de fecha
+  // 1. Artículos sin embedding — SIN filtro de fecha en BD
   // ============================================================
   const { data: pending, error: pendErr } = await supabase
     .from('articles')
@@ -125,14 +119,11 @@ export default async function handler(req, res) {
     .limit(300);
 
   if (pendErr) {
-    console.error('[generate] Error loading pending:', pendErr);
+    console.error('[generate] Error cargando pending:', pendErr);
     return res.status(500).json({ error: pendErr.message });
   }
 
   console.log(`[generate] ${pending?.length ?? 0} artículos sin embedding`);
-  if (pending?.length > 0) {
-    console.log('[generate] Muestra pub_dates:', pending.slice(0, 3).map(a => a.pub_date));
-  }
 
   // ============================================================
   // 2. Generar embeddings con Voyage AI
@@ -140,11 +131,8 @@ export default async function handler(req, res) {
   if (pending && pending.length > 0) {
     try {
       const texts = pending.map(a => `${a.title}. ${a.snippet || ''}`.slice(0, 2000));
-
       const batches = [];
-      for (let i = 0; i < texts.length; i += 128) {
-        batches.push(texts.slice(i, i + 128));
-      }
+      for (let i = 0; i < texts.length; i += 128) batches.push(texts.slice(i, i + 128));
 
       const embeddings = [];
       for (const batch of batches) {
@@ -162,24 +150,18 @@ export default async function handler(req, res) {
       }
 
       for (let i = 0; i < pending.length; i++) {
-        await supabase
-          .from('articles')
-          .update({ embedding: embeddings[i] })
-          .eq('id', pending[i].id);
+        await supabase.from('articles').update({ embedding: embeddings[i] }).eq('id', pending[i].id);
       }
       console.log(`[generate] ✓ ${pending.length} embeddings generados con Voyage`);
     } catch (err) {
       console.error('[generate] Embeddings error:', err.message);
-      return res.status(500).json({
-        error: 'Error generando embeddings con Voyage',
-        details: err.message,
-      });
+      return res.status(500).json({ error: 'Error generando embeddings', details: err.message });
     }
   }
 
   // ============================================================
-  // 3. Cargar artículos con embedding — SIN filtro de fecha en BD,
-  //    filtramos en JS para evitar problemas de formato de fecha
+  // 3. Cargar artículos con embedding — SIN filtro de fecha en BD
+  //    El filtro se hace en JS para evitar problemas de formato
   // ============================================================
   const { data: allWithEmbedding, error: artErr } = await supabase
     .from('articles')
@@ -188,9 +170,7 @@ export default async function handler(req, res) {
     .order('pub_date', { ascending: false })
     .limit(600);
 
-  if (artErr) {
-    return res.status(500).json({ error: artErr.message });
-  }
+  if (artErr) return res.status(500).json({ error: artErr.message });
 
   console.log(`[generate] Total artículos con embedding en BD: ${allWithEmbedding?.length ?? 0}`);
 
@@ -203,12 +183,12 @@ export default async function handler(req, res) {
 
   console.log(`[generate] Artículos en ventana 72h: ${recentArticles.length}`);
 
-  // Fallback: si hay menos de 10 recientes, usar los 200 más recientes de la BD
+  // Fallback: si <10 recientes, usar los 200 más recientes de BD
   const articlesToCluster = recentArticles.length >= 10
     ? recentArticles
     : (allWithEmbedding || []).slice(0, 200);
 
-  console.log(`[generate] Artículos a clusterizar: ${articlesToCluster.length}`);
+  console.log(`[generate] Clusterizando: ${articlesToCluster.length} artículos`);
 
   if (articlesToCluster.length === 0) {
     return res.status(200).json({
@@ -221,14 +201,10 @@ export default async function handler(req, res) {
   // 4. Clustering
   // ============================================================
   const rawClusters = clusterArticles(articlesToCluster, 0.78);
-
   console.log(`[generate] Clusters totales: ${rawClusters.length}`);
 
   const significant = rawClusters
-    .map(c => ({
-      ...c,
-      unique_sources: new Set(c.articles.map(a => a.source_name)).size,
-    }))
+    .map(c => ({ ...c, unique_sources: new Set(c.articles.map(a => a.source_name)).size }))
     .filter(c => c.unique_sources >= 1 && c.articles.length >= 2)
     .sort((a, b) => b.unique_sources - a.unique_sources);
 
@@ -348,10 +324,6 @@ export default async function handler(req, res) {
     clusters_detected: significant.length,
     clusters_selected: topClusters.length,
     cards_generated: generatedCards.length,
-    cards: generatedCards.map(c => ({
-      id: c.id,
-      headline: c.headline,
-      category: c.category,
-    })),
+    cards: generatedCards.map(c => ({ id: c.id, headline: c.headline, category: c.category })),
   });
 }
