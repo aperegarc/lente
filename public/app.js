@@ -1,11 +1,10 @@
 // ============================================================
-// /public/app.js — VERSIÓN v5 FINAL ARREGLADA
+// /public/app.js — VERSIÓN v10 FINAL — PERFIL EN LOCALSTORAGE
 // Cliente PWA · router + render + auth + planes de usuario
 // ============================================================
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
 
-// Inicializar Supabase con retry
 let supabaseClient = null;
 let supabaseReady = false;
 
@@ -14,7 +13,7 @@ function initSupabase() {
     try {
       supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       supabaseReady = true;
-      console.log('✓ Supabase inicializado correctamente');
+      console.log('✓ Supabase inicializado');
     } catch (err) {
       console.error('Error inicializando Supabase:', err);
       setTimeout(initSupabase, 100);
@@ -63,7 +62,6 @@ const MARKET_CATEGORIES = {
   bonos: 'Bonos',
 };
 
-// ESTADO
 const state = {
   session: null,
   profile: null,
@@ -87,7 +85,6 @@ function isLoggedIn() {
   return !!state.session;
 }
 
-// UTILIDADES
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => document.querySelectorAll(sel);
 
@@ -119,7 +116,6 @@ function fmtPct(n) {
   return `${sign}${Math.abs(n).toFixed(2)}%`;
 }
 
-// ROUTER
 function switchScreen(name) {
   state.currentScreen = name;
   $$('.screen').forEach(s => s.classList.remove('active'));
@@ -136,29 +132,22 @@ $$('.nav-item').forEach(n => {
   n.addEventListener('click', () => switchScreen(n.dataset.screen));
 });
 
-// FEED
 async function loadFeed() {
-  console.log('📰 loadFeed() iniciado');
   const list = $('feed-list');
   if (!list) return;
-  
-  list.innerHTML = `<div class="loading">Cargando resumen del día...</div>`;
+  list.innerHTML = `<div class="loading">Cargando...</div>`;
 
   try {
     await waitForSupabase();
     const url = API.feed + '?_t=' + Date.now();
-    console.log('📡 Fetch:', url);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    console.log('✓ Feed cargado:', data?.cards?.length, 'tarjetas');
     state.feed = data;
     renderFeed();
   } catch (err) {
     console.error('❌ Error loadFeed:', err);
-    if (list) {
-      list.innerHTML = `<div class="empty-state"><h2>No podemos conectar</h2><p>${err.message}</p></div>`;
-    }
+    if (list) list.innerHTML = `<div class="empty-state"><h2>Error cargando noticias</h2></div>`;
   }
 }
 
@@ -186,7 +175,7 @@ function renderFeed(filterCategory = null) {
     list.innerHTML = `
       <div class="empty-state">
         <h2>${filterCategory ? `Sin noticias de ${filterCategory}` : 'Sin contenido todavía'}</h2>
-        <p>${filterCategory ? 'Prueba con otro ámbito.' : 'El pipeline aún no ha publicado la edición de hoy. Vuelve pronto.'}</p>
+        <p>${filterCategory ? 'Prueba con otro ámbito.' : 'El pipeline aún no ha publicado la edición de hoy.'}</p>
       </div>
     `;
     return;
@@ -280,7 +269,6 @@ function renderFeed(filterCategory = null) {
   }
 }
 
-// TICKER
 function renderTicker() {
   const t = $('ticker');
   const popular = ['^IBEX', '^GSPC', 'GC=F', 'BTC-USD', 'EURUSD=X', 'BZ=F'];
@@ -304,11 +292,10 @@ function renderTicker() {
   }).join('');
 }
 
-// MERCADOS
 async function loadMarkets() {
   const list = $('markets-list');
   if (!list) return;
-  list.innerHTML = `<div class="loading">Cargando mercados...</div>`;
+  list.innerHTML = `<div class="loading">Cargando...</div>`;
 
   try {
     await waitForSupabase();
@@ -319,9 +306,6 @@ async function loadMarkets() {
     renderTicker();
   } catch (err) {
     console.error('Error loadMarkets:', err);
-    if (list) {
-      list.innerHTML = `<div class="empty-state"><h2>Sin datos de mercado</h2><p>No hemos podido conectar.</p></div>`;
-    }
   }
 }
 
@@ -332,11 +316,7 @@ function renderMarkets() {
 
   const cats = Object.keys(state.markets.grouped);
   tabs.innerHTML = `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>`
-    + cats.map(cat => `
-      <div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">
-        ${MARKET_CATEGORIES[cat] || cat}
-      </div>
-    `).join('');
+    + cats.map(cat => `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${MARKET_CATEGORIES[cat] || cat}</div>`).join('');
 
   const groups = state.currentMarketTab === 'all'
     ? state.markets.grouped
@@ -398,7 +378,6 @@ function setMarketTab(tab) {
   renderMarkets();
 }
 
-// ÁMBITOS
 const TOPICS = [
   { key: 'Macro', name: 'Macroecon­omía', icon: 'M', featured: true },
   { key: 'Bolsa', name: 'Bolsa y acciones', icon: 'B' },
@@ -417,14 +396,9 @@ function renderTopics() {
 
   const counts = {};
   for (const c of state.feed.cards) counts[c.category] = (counts[c.category] || 0) + 1;
-  const aliasMap = {
-    'Macro': ['Macro', 'Macro Europa', 'Política monetaria'],
-    'Energía': ['Energía', 'Materias primas'],
-  };
 
   grid.innerHTML = TOPICS.map(t => {
-    const aliases = aliasMap[t.key] || [t.key];
-    const count = aliases.reduce((a, al) => a + (counts[al] || 0), 0);
+    const count = counts[t.key] || 0;
     return `
       <div class="ambito-card ${t.featured ? 'featured' : ''}" onclick="filterByTopic('${t.key}')">
         <div class="ambito-icon">${t.icon}</div>
@@ -438,47 +412,38 @@ function renderTopics() {
 }
 
 function filterByTopic(topic) {
-  const matching = state.feed.cards.filter(c =>
-    c.category === topic || c.category.toLowerCase().includes(topic.toLowerCase())
-  );
+  const matching = state.feed.cards.filter(c => c.category === topic);
   if (matching.length === 0) { toast(`Sin noticias de ${topic} hoy`); return; }
   switchScreen('today');
-  renderFeed(matching[0].category);
+  renderFeed(topic);
   const screen = $('screen-today');
   if (screen) screen.scrollTop = 0;
 }
 
-// GUARDADOS
 async function loadSavedCards() {
   try {
-    console.log('💾 loadSavedCards() iniciado, session:', !!state.session);
-    
     await waitForSupabase();
     
     if (!state.session) {
-      console.log('📱 Sin sesión, cargando guardados locales');
       state.savedIds = new Set(JSON.parse(localStorage.getItem('lente.saved') || '[]'));
-      console.log('✓ Guardados locales cargados:', state.savedIds.size);
       return;
     }
 
-    console.log('🔐 Con sesión, cargando guardados de Supabase');
     const { data, error } = await supabaseClient
       .from('saved_cards')
       .select('card_id')
       .eq('user_id', state.session.user.id);
 
     if (error) {
-      console.error('❌ Error loadSavedCards:', error);
+      console.error('Error loadSavedCards:', error);
       return;
     }
 
     if (data) {
       state.savedIds = new Set(data.map(r => r.card_id));
-      console.log('✓ Guardados de Supabase cargados:', state.savedIds.size);
     }
   } catch (err) {
-    console.error('❌ Error en loadSavedCards:', err);
+    console.error('Error loadSavedCards:', err);
   }
 }
 
@@ -498,21 +463,15 @@ async function toggleSave(cardId, btn) {
 
     if (state.session) {
       if (saved) {
-        const { error } = await supabaseClient.from('saved_cards').delete()
+        await supabaseClient.from('saved_cards').delete()
           .eq('user_id', state.session.user.id)
           .eq('card_id', cardId);
-        
-        if (error) throw error;
       } else {
-        const { error } = await supabaseClient.from('saved_cards').upsert({
+        await supabaseClient.from('saved_cards').upsert({
           user_id: state.session.user.id,
           card_id: cardId,
           saved_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id,card_id'
-        });
-
-        if (error) throw error;
+        }, { onConflict: 'user_id,card_id' });
       }
     } else {
       localStorage.setItem('lente.saved', JSON.stringify([...state.savedIds]));
@@ -528,7 +487,7 @@ async function toggleSave(cardId, btn) {
       state.savedIds.add(cardId);
       btn?.classList.add('saved');
     }
-    toast('Error. Inténtalo de nuevo.');
+    toast('Error');
   }
 }
 
@@ -542,23 +501,23 @@ function renderSaved() {
     list.innerHTML = `
       <div class="empty-state">
         <h2>Inicia sesión para guardar</h2>
-        <p>Crea una cuenta gratuita para guardar tarjetas y acceder desde cualquier dispositivo.</p>
-        <button class="cta" style="margin-top:16px;" onclick="openLoginModal()">Crear cuenta gratis</button>
+        <p>Crea una cuenta gratuita para guardar tarjetas.</p>
+        <button class="cta" style="margin-top:16px;" onclick="openLoginModal()">Crear cuenta</button>
       </div>
     `;
-    if (state.savedIds.size > 0) renderSavedCards(list, saved, true);
+    if (state.savedIds.size > 0) renderSavedCards(list, saved);
     return;
   }
 
-  renderSavedCards(list, saved, false);
+  renderSavedCards(list, saved);
 }
 
-function renderSavedCards(list, saved, isGuest) {
+function renderSavedCards(list, saved) {
   if (saved.length === 0) {
     list.innerHTML = `
       <div class="empty-state">
         <h2>Aún no has guardado nada</h2>
-        <p>Toca el marcador en cualquier tarjeta para guardarla aquí.</p>
+        <p>Toca el marcador en cualquier tarjeta para guardarla.</p>
       </div>
     `;
     return;
@@ -590,7 +549,6 @@ function renderSavedCards(list, saved, isGuest) {
   }).join('');
 }
 
-// COMPARTIR
 async function shareCard(id) {
   const card = state.feed.cards.find(c => c.id === id);
   if (!card) return;
@@ -606,7 +564,6 @@ async function shareCard(id) {
   }
 }
 
-// AUTH
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data === 'RELOAD') window.location.reload();
@@ -678,59 +635,33 @@ function renderProfileModal() {
 async function signOut() {
   try {
     const btn = $('logout-btn');
-    if (btn) {
-      btn.disabled = true;
-      btn.style.opacity = '0.5';
-    }
-
-    console.log('🔐 Iniciando logout...');
+    if (btn) btn.disabled = true;
 
     await waitForSupabase();
-
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) {
-      console.error('Error en Supabase.signOut():', error);
-    }
-
-    console.log('✓ Sesión cerrada');
+    await supabaseClient.auth.signOut();
 
     const modal = $('profile-modal');
-    if (modal) {
-      modal.classList.remove('open');
-    }
+    if (modal) modal.classList.remove('open');
 
     const savedCardIds = localStorage.getItem('lente.saved');
-
     localStorage.clear();
     sessionStorage.clear();
-
-    if (savedCardIds) {
-      localStorage.setItem('lente.saved', savedCardIds);
-    }
+    if (savedCardIds) localStorage.setItem('lente.saved', savedCardIds);
 
     state.session = null;
     state.profile = null;
     state.feed = { date: null, cards: [] };
     state.savedIds.clear();
 
-    console.log('✓ Estado limpiado');
-
     updateProfileBtn();
     toast('Sesión cerrada ✓');
 
-    console.log('⏳ Recargando en 600ms...');
-    setTimeout(() => {
-      window.location.href = window.location.origin;
-    }, 600);
-
+    setTimeout(() => { window.location.href = window.location.origin; }, 600);
   } catch (err) {
-    console.error('❌ Error en logout:', err);
-    toast('Error: ' + (err.message || 'desconocido'));
+    console.error('Error logout:', err);
+    toast('Error');
     const btn = $('logout-btn');
-    if (btn) {
-      btn.disabled = false;
-      btn.style.opacity = '1';
-    }
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -754,6 +685,7 @@ async function toggleDailyReminder() {
     if (error) throw error;
 
     state.profile.daily_reminder_enabled = !isEnabled;
+    saveProfileToLocalStorage();
     
     if (!isEnabled) {
       if (btn) {
@@ -769,8 +701,8 @@ async function toggleDailyReminder() {
       toast('Recordatorios desactivados');
     }
   } catch (err) {
-    console.error('Error en recordatorio:', err);
-    toast('Error al actualizar recordatorio');
+    console.error('Error recordatorio:', err);
+    toast('Error');
   }
 }
 
@@ -840,13 +772,11 @@ async function submitLogin() {
       const { data, error } = await supabaseClient.auth.signUp({
         email,
         password,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
+        options: { emailRedirectTo: window.location.origin },
       });
 
       if (error) {
-        status.textContent = error.message || 'Error creando cuenta';
+        status.textContent = error.message || 'Error';
         status.className = 'login-status error';
       } else if (data?.user) {
         status.textContent = '✓ Cuenta creada. Revisa tu email';
@@ -862,7 +792,7 @@ async function submitLogin() {
       });
 
       if (error) {
-        status.textContent = error.message || 'Error iniciando sesión';
+        status.textContent = error.message || 'Error';
         status.className = 'login-status error';
       } else if (data?.session) {
         status.textContent = '✓ Sesión iniciada';
@@ -874,11 +804,29 @@ async function submitLogin() {
       }
     }
   } catch (err) {
-    console.error('Error en submitLogin:', err);
+    console.error('Error submitLogin:', err);
     const status = $('login-status');
     if (status) {
-      status.textContent = 'Error: ' + (err.message || 'desconocido');
+      status.textContent = 'Error';
       status.className = 'login-status error';
+    }
+  }
+}
+
+function saveProfileToLocalStorage() {
+  if (state.profile) {
+    localStorage.setItem('lente.profile', JSON.stringify(state.profile));
+  }
+}
+
+function loadProfileFromLocalStorage() {
+  const cached = localStorage.getItem('lente.profile');
+  if (cached) {
+    try {
+      state.profile = JSON.parse(cached);
+      console.log('✓ Perfil restaurado desde localStorage');
+    } catch (err) {
+      console.error('Error restaurando perfil:', err);
     }
   }
 }
@@ -886,7 +834,6 @@ async function submitLogin() {
 async function loadProfile(userId) {
   try {
     await waitForSupabase();
-    console.log('👤 Cargando perfil para:', userId);
     
     const { data, error } = await supabaseClient
       .from('profiles')
@@ -895,35 +842,24 @@ async function loadProfile(userId) {
       .single();
 
     if (error) {
-      console.error('⚠️ Error loadProfile:', error);
-      state.profile = { 
-        plan: 'free', 
-        is_admin: false, 
-        daily_reminder_enabled: false 
-      };
+      console.error('Error loadProfile:', error);
+      state.profile = { plan: 'free', is_admin: false, daily_reminder_enabled: false };
       return;
     }
 
-    state.profile = data || { 
-      plan: 'free', 
-      is_admin: false, 
-      daily_reminder_enabled: false 
-    };
-    console.log('✓ Perfil cargado:', state.profile);
+    state.profile = data || { plan: 'free', is_admin: false, daily_reminder_enabled: false };
+    saveProfileToLocalStorage();
+    console.log('✓ Perfil cargado y guardado');
   } catch (err) {
-    console.error('❌ Error en loadProfile:', err);
-    state.profile = { 
-      plan: 'free', 
-      is_admin: false, 
-      daily_reminder_enabled: false 
-    };
+    console.error('Error loadProfile:', err);
+    state.profile = { plan: 'free', is_admin: false, daily_reminder_enabled: false };
   }
 }
 
 function updateProfileBtn() {
   const btn = $('profile-btn');
   if (!btn) return;
-  if (state.session && state.session.user && state.session.user.email) {
+  if (state.session && state.session.user?.email) {
     btn.textContent = state.session.user.email[0].toUpperCase();
     btn.classList.toggle('is-premium', isPremium());
   } else {
@@ -935,20 +871,15 @@ function updateProfileBtn() {
 async function setupAuthListener() {
   try {
     await waitForSupabase();
-    console.log('👂 setupAuthListener() registrado');
-    
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔐 Auth state changed:', event, '| session:', !!session);
       state.session = session;
       if (session) {
-        console.log('🔐 Sesión detectada, cargando perfil...');
         await loadProfile(session.user.id);
-        console.log('🔐 Perfil cargado, cargando guardados...');
         await loadSavedCards();
-        console.log('🔐 Guardados cargados');
       } else {
         state.profile = null;
         state.savedIds.clear();
+        localStorage.removeItem('lente.profile');
       }
       updateProfileBtn();
     });
@@ -963,26 +894,37 @@ if (document.readyState === 'loading') {
   setupAuthListener();
 }
 
-async function refreshSession() {
+async function initApp() {
   try {
-    console.log('🔄 refreshSession() iniciado');
+    console.log('🚀 Iniciando app...');
     await waitForSupabase();
-    
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    state.session = session;
-    console.log('✓ Session obtenida:', !!session);
+
+    // Restaurar perfil de localStorage (si existe)
+    loadProfileFromLocalStorage();
+
+    // Obtener sesión
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
     
     if (session) {
-      console.log('🔄 Sesión encontrada, cargando perfil...');
+      state.session = session;
+      // Recargar perfil desde BD (para datos frescos)
       await loadProfile(session.user.id);
-      console.log('🔄 Perfil cargado, cargando guardados...');
       await loadSavedCards();
-      console.log('🔄 Guardados cargados');
     }
+
     updateProfileBtn();
+    await loadFeed();
+    console.log('✅ App lista');
   } catch (err) {
-    console.error('Error refreshSession:', err);
+    console.error('Error initApp:', err);
+    await loadFeed();
   }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
 }
 
 // PWA INSTALL
@@ -1012,30 +954,4 @@ function dismissInstall() {
   const banner = $('install-prompt');
   if (banner) banner.classList.remove('show');
   localStorage.setItem('lente.install.dismissed', '1');
-}
-
-// INIT
-async function init() {
-  console.log('🚀 === INICIANDO APP === 🚀');
-  
-  console.log('Paso 1: Esperar Supabase...');
-  await waitForSupabase();
-  console.log('✓ Supabase listo');
-  
-  console.log('Paso 2: Restaurar sesión...');
-  await refreshSession();
-  console.log('✓ Sesión restaurada (perfil + guardados ya cargados)');
-  
-  console.log('Paso 3: Cargar feed...');
-  await loadFeed();
-  console.log('✓ Feed cargado');
-  
-  console.log('✅ === APP LISTA === ✅');
-}
-
-// Asegurar que el HTML esté listo
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
 }
