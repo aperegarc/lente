@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/cron/markets-update",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 9,14 * * MON-FRI"
     }
   ]
 }

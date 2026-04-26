@@ -1,34 +1,70 @@
 // ============================================================
-// /public/app.js — VERSIÓN v22 CON TRADINGVIEW
-// Gráficas profesionales de TradingView
+// /public/app.js — VERSIÓN v26 FINAL
+// Ticker simple + gráficas TradingView
+// Números y % en vivo, click abre gráfica completa
 // ============================================================
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
-const IEX_API_KEY = '69edd891614886.20624499';
 
-const COINGECKO_MAP = {
-  'BTC-USD': 'bitcoin',
-  'ETH-USD': 'ethereum',
-  'XRP-USD': 'ripple',
-  'ADA-USD': 'cardano',
-  'SOL-USD': 'solana',
-};
-
-// Mapeo a símbolos TradingView
 const TRADINGVIEW_MAP = {
   '^IBEX': 'IBEX:IBEX',
+  '^GSPC': 'FOREXCOM:SPX500',
+  '^NDX': 'NASDAQ:CCMP',
+  '^STOXX50E': 'STOXX:STOXX50E',
   'AAPL': 'NASDAQ:AAPL',
   'MSFT': 'NASDAQ:MSFT',
   'GOOGL': 'NASDAQ:GOOGL',
+  'GOOG': 'NASDAQ:GOOG',
   'AMZN': 'NASDAQ:AMZN',
+  'NVDA': 'NASDAQ:NVDA',
+  'META': 'NASDAQ:META',
   'TSLA': 'NASDAQ:TSLA',
-  '^GSPC': 'FOREXCOM:SPX500',
+  'NFLX': 'NASDAQ:NFLX',
+  'UBER': 'NYSE:UBER',
+  'JPM': 'NYSE:JPM',
+  'BAC': 'NYSE:BAC',
+  'GS': 'NYSE:GS',
+  'WFC': 'NYSE:WFC',
+  'BA': 'NYSE:BA',
+  'CAT': 'NYSE:CAT',
+  'GE': 'NYSE:GE',
+  'XOM': 'NYSE:XOM',
+  'CVX': 'NYSE:CVX',
+  'MPC': 'NYSE:MPC',
+  'JNJ': 'NYSE:JNJ',
+  'UNH': 'NYSE:UNH',
+  'PFE': 'NYSE:PFE',
+  'ABBV': 'NYSE:ABBV',
+  'WMT': 'NYSE:WMT',
+  'KO': 'NYSE:KO',
+  'MCD': 'NYSE:MCD',
+  'SAN': 'BME:SAN',
+  'IBE': 'BME:IBE',
+  'BBVA': 'BME:BBVA',
+  'REP': 'BME:REP',
+  'ELE': 'BME:ELE',
+  'ACS': 'BME:ACS',
+  'AENA': 'BME:AENA',
+  'INGA': 'BME:INGA',
   'BTC-USD': 'BINANCE:BTCUSDT',
   'ETH-USD': 'BINANCE:ETHUSDT',
+  'XRP-USD': 'BINANCE:XRPUSDT',
+  'ADA-USD': 'BINANCE:ADAUSDT',
+  'SOL-USD': 'BINANCE:SOLUSDT',
+  'DOGE-USD': 'BINANCE:DOGEUSDT',
+  'LINK-USD': 'BINANCE:LINKUSDT',
+  'MATIC-USD': 'BINANCE:MATICUSDT',
   'EURUSD=X': 'FX:EURUSD',
+  'GBPUSD=X': 'FX:GBPUSD',
+  'JPYUSD=X': 'FX:USDJPY',
+  'CHFUSD=X': 'FX:USDCHF',
+  'AUDUSD=X': 'FX:AUDUSD',
+  'CADUSD=X': 'FX:USDCAD',
+  'GC=F': 'FOREXCOM:XAUUSD',
+  'BZ=F': 'NYMEX:CL1!',
+  'TTF=F': 'EUREX:FGBL1',
+  'SI=F': 'COMEX:SI1!',
 };
-
-const IEX_BLOCKED = ['GC=F', 'BZ=F', 'TTF=F', 'EURGBP=X'];
 
 let supabaseClient = null;
 let supabaseReady = false;
@@ -77,11 +113,6 @@ const CATEGORY_COLORS = {
   'Política monetaria': '', 'Materias primas': 'green', 'Macro Europa': 'blue',
   'Macro': 'blue', 'Tech': 'red', 'Bolsa': 'red', 'Cripto': 'purple',
   'Energía': 'green', 'España': '', 'Geopolítica': 'blue', 'Inmobiliario': '', 'Laboral': '',
-};
-
-const MARKET_CATEGORIES = {
-  indices: 'Índices bursátiles', materias: 'Materias primas', divisas: 'Divisas',
-  cripto: 'Criptomonedas', bonos: 'Bonos',
 };
 
 const state = {
@@ -150,9 +181,9 @@ $$('.nav-item').forEach(n => {
 });
 
 async function loadFeed() {
-  const list = $('feed-list');
-  if (!list) return;
-  list.innerHTML = `<div class="loading">Cargando...</div>`;
+  const feedList = $('feed-list');
+  if (!feedList) return;
+  feedList.innerHTML = `<div class="loading">Cargando...</div>`;
   try {
     await waitForSupabase();
     const url = API.feed + '?_t=' + Date.now();
@@ -163,7 +194,7 @@ async function loadFeed() {
     renderFeed();
   } catch (err) {
     console.error('❌ Error loadFeed:', err.message);
-    if (list) list.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
+    if (feedList) feedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
   }
 }
 
@@ -175,15 +206,15 @@ function toggleReadMore(id) {
 }
 
 function renderFeed(filterCategory = null) {
-  const list = $('feed-list');
-  if (!list) return;
+  const feedList = $('feed-list');
+  if (!feedList) return;
   const cards = filterCategory ? state.feed.cards.filter(c => c.category === filterCategory) : state.feed.cards;
   const dateLabel = $('date-label');
   const editionLabel = $('edition-label');
   if (dateLabel) dateLabel.textContent = fmtDate(state.feed.date);
   if (editionLabel) editionLabel.textContent = filterCategory ? `Filtro · ${filterCategory}` : 'Edición del día';
   if (!cards || cards.length === 0) {
-    list.innerHTML = `<div class="empty-state"><h2>${filterCategory ? `Sin noticias de ${filterCategory}` : 'Sin contenido todavía'}</h2></div>`;
+    feedList.innerHTML = `<div class="empty-state"><h2>${filterCategory ? `Sin noticias de ${filterCategory}` : 'Sin contenido todavía'}</h2></div>`;
     return;
   }
   const totalReadTime = Math.round(cards.reduce((a, c) => a + (c.read_time_seconds || 40), 0) / 60);
@@ -193,15 +224,23 @@ function renderFeed(filterCategory = null) {
     const saved = state.savedIds.has(c.id);
     html += `<section class="card" data-id="${c.id}"><div class="card-meta"><span class="category ${catClass}">${c.category}</span><span class="read-time">· ${c.read_time_seconds || 40} s</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${c.id}">${c.body}</p><button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${c.meaning}</p></div><div class="card-footer"><div class="actions"><button class="action-btn ${saved ? 'saved' : ''}" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button class="action-btn" onclick="shareCard('${c.id}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`;
   }
-  list.innerHTML = html;
+  feedList.innerHTML = html;
 }
 
 function renderTicker() {
-  const t = $('ticker');
+  const tickerEl = $('ticker');
+  if (!tickerEl) return;
+  
+  // Mostrar ticker simple desde mercados cargados
   const popular = ['^IBEX', 'AAPL', 'MSFT', 'BTC-USD', 'ETH-USD', 'TSLA'];
   const items = popular.map(sym => state.markets.flat.find(m => m.symbol === sym)).filter(Boolean);
-  if (items.length === 0) { t.innerHTML = ''; return; }
-  t.innerHTML = items.map(m => {
+  
+  if (items.length === 0) {
+    tickerEl.innerHTML = '';
+    return;
+  }
+  
+  tickerEl.innerHTML = items.map(m => {
     const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
     const prefix = m.symbol === 'GC=F' || m.symbol === 'BZ=F' ? '$' : '';
     const priceDigits = m.price > 1000 ? 0 : 2;
@@ -210,9 +249,9 @@ function renderTicker() {
 }
 
 async function loadMarkets() {
-  const list = $('markets-list');
-  if (!list) return;
-  list.innerHTML = `<div class="loading">Cargando...</div>`;
+  const marketsList = $('markets-list');
+  if (!marketsList) return;
+  marketsList.innerHTML = `<div class="loading">Cargando...</div>`;
   try {
     await waitForSupabase();
     const res = await fetch(API.markets + '?_t=' + Date.now());
@@ -226,33 +265,41 @@ async function loadMarkets() {
 }
 
 function renderMarkets() {
+  const marketsList = $('markets-list');
   const tabs = $('market-tabs');
-  const list = $('markets-list');
-  if (!tabs || !list) return;
+  if (!marketsList || !tabs) return;
+  
   const cats = Object.keys(state.markets.grouped);
-  tabs.innerHTML = `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` + cats.map(cat => `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${MARKET_CATEGORIES[cat] || cat}</div>`).join('');
+  tabs.innerHTML = `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` + cats.map(cat => `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${cat}</div>`).join('');
+  
   const groups = state.currentMarketTab === 'all' ? state.markets.grouped : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
-  if ($('markets-updated')) $('markets-updated').textContent = state.markets.updated_at ? `Actualizado ${new Date(state.markets.updated_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}` : '–';
-  list.innerHTML = Object.entries(groups).map(([cat, items]) => `<div class="market-section"><h3 class="market-section-title">${MARKET_CATEGORIES[cat] || cat}</h3>${items.map(m => renderMarketItem(m)).join('')}</div>`).join('');
-}
-
-function renderMarketItem(m) {
-  const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
-  const prefix = m.symbol?.includes('=F') ? '$' : '';
-  const priceDigits = m.price > 1000 ? 0 : m.symbol?.includes('EUR') ? 4 : 2;
-
-  return `
-    <div class="market-item" style="cursor: pointer; transition: background 0.2s;" onclick="openMarketChart('${m.symbol}', '${m.name}', '${prefix}')">
-      <div class="market-item-left">
-        <div class="market-item-name">${m.name}</div>
-        <div class="market-item-desc">${m.description || ''}</div>
-      </div>
-      <div class="market-item-right">
-        <div class="market-price">${prefix}${fmtNum(m.price, priceDigits)}</div>
-        <div class="market-change ${cls}">${fmtPct(m.change_pct)}</div>
-      </div>
-    </div>
-  `;
+  
+  let html = '';
+  for (const [cat, items] of Object.entries(groups)) {
+    html += `<div class="market-section"><h3 class="market-section-title">${cat}</h3>`;
+    for (const m of items) {
+      const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
+      const prefix = m.symbol?.includes('=F') ? '$' : '';
+      const priceDigits = m.price > 1000 ? 0 : m.symbol?.includes('EUR') ? 4 : 2;
+      const tvSymbol = TRADINGVIEW_MAP[m.symbol] || m.symbol;
+      
+      html += `
+        <div class="market-item" style="cursor: pointer;" onclick="openMarketChart('${tvSymbol}', '${m.name}')">
+          <div class="market-item-left">
+            <div class="market-item-name">${m.name}</div>
+            <div class="market-item-desc">${m.description || ''}</div>
+          </div>
+          <div class="market-item-right">
+            <div class="market-price">${prefix}${fmtNum(m.price, priceDigits)}</div>
+            <div class="market-change ${cls}">${fmtPct(m.change_pct)}</div>
+          </div>
+        </div>
+      `;
+    }
+    html += `</div>`;
+  }
+  
+  marketsList.innerHTML = html;
 }
 
 function setMarketTab(tab) {
@@ -260,10 +307,8 @@ function setMarketTab(tab) {
   renderMarkets();
 }
 
-async function openMarketChart(symbol, name, prefix) {
-  console.log('📊 Abriendo gráfica TradingView:', symbol);
-  
-  const tvSymbol = TRADINGVIEW_MAP[symbol] || symbol;
+async function openMarketChart(tvSymbol, name) {
+  console.log('📊 Abriendo gráfica TradingView:', name);
   
   const modal = document.createElement('div');
   modal.style.cssText = `
@@ -279,43 +324,48 @@ async function openMarketChart(symbol, name, prefix) {
     z-index: 10000;
   `;
   
+  const chartId = `tradingview-chart-${tvSymbol.replace(':', '-')}`;
+  
   modal.innerHTML = `
     <div style="background: #1a1a1a; border-radius: 16px; width: 95%; max-width: 900px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;">
       <div style="padding: 16px; border-bottom: 1px solid #3a3530; display: flex; justify-content: space-between; align-items: center;">
         <div>
           <div style="font-size: 16px; font-weight: 600; color: #fff;">${name}</div>
-          <div style="font-size: 12px; color: #999;">${symbol}</div>
+          <div style="font-size: 12px; color: #999;">${tvSymbol}</div>
         </div>
         <button onclick="this.closest('div').parentElement.parentElement.remove()" style="background: none; border: none; color: #ccc; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">×</button>
       </div>
-      <div id="tradingview-chart-${symbol}" style="flex: 1; padding: 0; background: #0a0a0a;"></div>
+      <div id="${chartId}" style="flex: 1; padding: 0; background: #0a0a0a;"></div>
     </div>
   `;
   
   document.body.appendChild(modal);
   
-  // Cargar TradingView script si no está
-  if (!window.TradingView) {
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
-    script.async = true;
-    script.onload = () => {
-      renderTradingViewChart(symbol, tvSymbol);
-    };
-    document.body.appendChild(script);
-  } else {
-    renderTradingViewChart(symbol, tvSymbol);
-  }
+  loadTradingViewScript(() => {
+    renderTradingViewChart(chartId, tvSymbol);
+  });
   
   modal.addEventListener('click', (e) => {
     if (e.target === modal) modal.remove();
   });
 }
 
-function renderTradingViewChart(symbol, tvSymbol) {
+function loadTradingViewScript(callback) {
+  if (window.TradingView) {
+    callback();
+  } else {
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/tv.js';
+    script.async = true;
+    script.onload = callback;
+    document.body.appendChild(script);
+  }
+}
+
+function renderTradingViewChart(containerId, tvSymbol) {
   try {
     new TradingView.widget({
-      "container_id": `tradingview-chart-${symbol}`,
+      "container_id": containerId,
       "autosize": true,
       "symbol": tvSymbol,
       "interval": "D",
@@ -325,19 +375,15 @@ function renderTradingViewChart(symbol, tvSymbol) {
       "locale": "es",
       "toolbar_bg": "#1a1a1a",
       "enable_publishing": false,
-      "allow_symbol_change": false,
+      "allow_symbol_change": true,
       "hide_side_toolbar": false,
       "details": true,
-      "hotlist": false,
-      "calendar": false,
-      "studies": ["Volume@tv-basicstudies"]
+      "hotlist": true,
+      "calendar": true,
+      "studies": ["Volume@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"]
     });
   } catch (err) {
     console.error('Error TradingView:', err);
-    const container = document.getElementById(`tradingview-chart-${symbol}`);
-    if (container) {
-      container.innerHTML = '<div style="color: #d66a5c; padding: 20px; text-align: center;">Error cargando gráfica. Intenta de nuevo.</div>';
-    }
   }
 }
 
@@ -415,15 +461,15 @@ async function toggleSave(cardId, btn) {
 }
 
 function renderSaved() {
-  const list = $('saved-list');
-  if (!list) return;
+  const savedList = $('saved-list');
+  if (!savedList) return;
   const saved = state.feed.cards.filter(c => state.savedIds.has(c.id));
   if (!isLoggedIn()) {
-    list.innerHTML = `<div class="empty-state"><h2>Inicia sesión</h2><button class="cta" onclick="openLoginModal()">Crear cuenta</button></div>`;
-    if (state.savedIds.size > 0) list.innerHTML = saved.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p></section>`).join('');
+    savedList.innerHTML = `<div class="empty-state"><h2>Inicia sesión</h2><button class="cta" onclick="openLoginModal()">Crear cuenta</button></div>`;
+    if (state.savedIds.size > 0) savedList.innerHTML = saved.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p></section>`).join('');
     return;
   }
-  list.innerHTML = saved.length === 0 ? `<div class="empty-state"><h2>Aún no guardaste nada</h2></div>` : saved.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
+  savedList.innerHTML = saved.length === 0 ? `<div class="empty-state"><h2>Aún no guardaste nada</h2></div>` : saved.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
 }
 
 async function shareCard(id) {
@@ -696,13 +742,13 @@ async function startApp() {
 }
 
 async function init() {
-  console.log('🚀 Inicializando app...');
+  console.log('🚀 Inicializando app v26...');
   await initAuth();
   updateProfileBtn();
   await startApp();
   await setupAuthListener();
   appReady = true;
-  console.log('✅ App lista');
+  console.log('✅ App v26 lista');
 }
 
 if (document.readyState === 'loading') {
