@@ -308,46 +308,37 @@ function setMarketTab(tab) {
 }
 
 async function openMarketChart(tvSymbol, name) {
-  console.log('📊 Abriendo gráfica TradingView:', name);
-  
-  const modal = document.createElement('div');
-  modal.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-  `;
-  
-  const chartId = `tradingview-chart-${tvSymbol.replace(':', '-')}`;
-  
-  modal.innerHTML = `
-    <div style="background: #1a1a1a; border-radius: 16px; width: 95%; max-width: 900px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;">
-      <div style="padding: 16px; border-bottom: 1px solid #3a3530; display: flex; justify-content: space-between; align-items: center;">
+  const backdrop = document.createElement('div');
+  backdrop.id = 'chart-modal-backdrop';
+  backdrop.className = 'chart-modal-backdrop';
+
+  const chartId = `tv-${tvSymbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+  backdrop.innerHTML = `
+    <div class="chart-modal">
+      <div class="chart-modal-header">
         <div>
-          <div style="font-size: 16px; font-weight: 600; color: #fff;">${name}</div>
-          <div style="font-size: 12px; color: #999;">${tvSymbol}</div>
+          <div class="chart-modal-title">${name}</div>
+          <div class="chart-modal-symbol">${tvSymbol}</div>
         </div>
-        <button onclick="this.closest('div').parentElement.parentElement.remove()" style="background: none; border: none; color: #ccc; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">×</button>
+        <button class="chart-modal-close" onclick="closeChartModal()">×</button>
       </div>
-      <div id="${chartId}" style="flex: 1; padding: 0; background: #0a0a0a;"></div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  
+      <div class="chart-modal-body" id="${chartId}"></div>
+    </div>`;
+
+  document.body.appendChild(backdrop);
+
   loadTradingViewScript(() => {
     renderTradingViewChart(chartId, tvSymbol);
   });
-  
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.remove();
+
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) backdrop.remove();
   });
+}
+
+function closeChartModal() {
+  document.getElementById('chart-modal-backdrop')?.remove();
 }
 
 function loadTradingViewScript(callback) {
