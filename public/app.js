@@ -1,5 +1,5 @@
 // ============================================================
-// /public/app.js — VERSIÓN v15 ARQUITECTURA CORRECTA
+// /public/app.js — VERSIÓN v16 CON PWA INSTALL CORREGIDO
 // Cliente PWA · router + render + auth + planes de usuario
 // ÚNICA FUENTE DE VERDAD: state.session
 // ============================================================
@@ -165,7 +165,7 @@ function renderFeed(filterCategory = null) {
 
 function renderTicker() {
   const t = $('ticker');
-  const popular = ['^IBEX', '^GSPC', 'GC=F', 'BTC-USD', 'EURUSD=X', 'BZ=F'];
+  const popular = ['^IBEX', 'AAPL', 'MSFT', 'BTC-USD', 'ETH-USD', 'TSLA'];
   const items = popular.map(sym => state.markets.flat.find(m => m.symbol === sym)).filter(Boolean);
   if (items.length === 0) { t.innerHTML = ''; return; }
   t.innerHTML = items.map(m => {
@@ -563,31 +563,88 @@ if (document.readyState === 'loading') {
   init();
 }
 
+// ============================================================
+// PWA INSTALL — Versión corregida
+// ============================================================
+
 let deferredPrompt = null;
+let installPromptShown = false;
+
+// Capturar beforeinstallprompt CORRECTAMENTE
 window.addEventListener('beforeinstallprompt', (e) => {
+  console.log('📦 beforeinstallprompt capturado');
   e.preventDefault();
   deferredPrompt = e;
-  if (!localStorage.getItem('lente.install.dismissed')) {
+  
+  // Mostrar banner después de 3 segundos
+  if (!localStorage.getItem('lente.install.dismissed') && !installPromptShown) {
     setTimeout(() => {
-      $('install-prompt')?.classList.add('show');
+      console.log('📦 Mostrando install prompt');
+      const banner = $('install-prompt');
+      if (banner) {
+        banner.classList.add('show');
+        installPromptShown = true;
+      }
     }, 3000);
   }
 });
 
-async function installPWA() {
-  if (!deferredPrompt) return;
-  $('install-prompt')?.classList.remove('show');
-  deferredPrompt.prompt();
-  const { outcome } = await deferredPrompt.userChoice;
-  if (outcome === 'accepted') toast('Instalación iniciada');
+// Detectar si ya está instalada
+window.addEventListener('appinstalled', () => {
+  console.log('📦 App instalada!');
   deferredPrompt = null;
+  const banner = $('install-prompt');
+  if (banner) banner.classList.remove('show');
+});
+
+// En display: standalone (ya instalada)
+if (window.navigator.standalone === true) {
+  console.log('📦 Running as installed PWA');
+  const banner = $('install-prompt');
+  if (banner) banner.style.display = 'none';
+}
+
+async function installPWA() {
+  console.log('📦 installPWA() llamado, deferredPrompt:', !!deferredPrompt);
+  
+  if (!deferredPrompt) {
+    console.error('❌ deferredPrompt es null');
+    alert('La instalación no está disponible en este navegador');
+    return;
+  }
+
+  try {
+    // Mostrar el diálogo nativo
+    deferredPrompt.prompt();
+    
+    // Esperar respuesta
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log('📦 User choice:', outcome);
+    
+    if (outcome === 'accepted') {
+      console.log('✅ App instalada!');
+      toast('¡App instalada! 🎉');
+      const banner = $('install-prompt');
+      if (banner) banner.classList.remove('show');
+    } else {
+      console.log('❌ User rechazó instalación');
+      toast('Instalación cancelada');
+    }
+    
+    deferredPrompt = null;
+  } catch (err) {
+    console.error('❌ Error instalación:', err);
+    toast('Error al instalar');
+  }
 }
 
 function dismissInstall() {
-  $('install-prompt')?.classList.remove('show');
+  console.log('📦 Dismiss install');
+  const banner = $('install-prompt');
+  if (banner) banner.classList.remove('show');
   localStorage.setItem('lente.install.dismissed', '1');
 }
 
 function showInstallGuide() {
-  toast('Abre el menú del navegador y selecciona "Instalar app"');
+  alert('Abre el menú del navegador (⋮) y selecciona "Instalar app"');
 }
