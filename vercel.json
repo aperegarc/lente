@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/cron/markets-update",
-      "schedule": "0 9,14 * * 1-5"
+      "schedule": "0 6 * * *"
     }
   ]
 }
