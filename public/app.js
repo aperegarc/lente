@@ -1,15 +1,37 @@
 // ============================================================
-// /public/app.js — VERSIÓN v16 CON PWA INSTALL CORREGIDO
-// Cliente PWA · router + render + auth + planes de usuario
-// ÚNICA FUENTE DE VERDAD: state.session
+// /public/app.js — VERSIÓN v20 CON VALIDACIÓN DE APIS
+// IEX Cloud + Coingecko con fallback
 // ============================================================
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
+const IEX_API_KEY = '69edd891614886.20624499';
+
+// Mapeo de símbolos a IDs de Coingecko
+const COINGECKO_MAP = {
+  'BTC-USD': 'bitcoin',
+  'ETH-USD': 'ethereum',
+  'XRP-USD': 'ripple',
+  'ADA-USD': 'cardano',
+  'SOL-USD': 'solana',
+};
+
+// Símbolos que NO funcionan en IEX (divisas, etc)
+const IEX_BLOCKED = ['EURUSD=X', 'EURGBP=X', '^STOXX50E', '^NDX', 'GC=F', 'BZ=F', 'TTF=F'];
 
 let supabaseClient = null;
 let supabaseReady = false;
 let authListenerInitialized = false;
 let appReady = false;
+
+// PWA Install
+let deferredPrompt = null;
+const ua = navigator.userAgent.toLowerCase();
+const isIOS = /iphone|ipad|ipod/.test(ua);
+const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+const isAndroid = /android/.test(ua);
+const isChrome = /chrome|chromium|crios/.test(ua);
+const isEdge = /edg/.test(ua);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
 function initSupabase() {
   if (window.supabase && !supabaseClient) {
@@ -200,17 +222,238 @@ function renderMarkets() {
   tabs.innerHTML = `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` + cats.map(cat => `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${MARKET_CATEGORIES[cat] || cat}</div>`).join('');
   const groups = state.currentMarketTab === 'all' ? state.markets.grouped : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
   if ($('markets-updated')) $('markets-updated').textContent = state.markets.updated_at ? `Actualizado ${new Date(state.markets.updated_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}` : '–';
-  list.innerHTML = Object.entries(groups).map(([cat, items]) => `<div class="market-section"><h3 class="market-section-title">${MARKET_CATEGORIES[cat] || cat}</h3>${items.map(m => {
-    const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
-    const prefix = m.symbol?.includes('=F') ? '$' : '';
-    const priceDigits = m.price > 1000 ? 0 : 2;
-    return `<div class="market-item"><div class="market-item-left"><div class="market-item-name">${m.name}</div><div class="market-item-desc">${m.description || ''}</div></div><div class="market-item-right"><div class="market-price">${prefix}${fmtNum(m.price, priceDigits)}</div><div class="market-change ${cls}">${fmtPct(m.change_pct)}</div></div></div>`;
-  }).join('')}</div>`).join('');
+  list.innerHTML = Object.entries(groups).map(([cat, items]) => `<div class="market-section"><h3 class="market-section-title">${MARKET_CATEGORIES[cat] || cat}</h3>${items.map(m => renderMarketItem(m)).join('')}</div>`).join('');
+}
+
+function renderMarketItem(m) {
+  const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
+  const prefix = m.symbol?.includes('=F') ? '$' : '';
+  const priceDigits = m.price > 1000 ? 0 : m.symbol?.includes('EUR') ? 4 : 2;
+
+  return `
+    <div class="market-item" style="cursor: pointer; transition: background 0.2s;" onclick="openMarketChart('${m.symbol}', '${m.name}', '${prefix}')">
+      <div class="market-item-left">
+        <div class="market-item-name">${m.name}</div>
+        <div class="market-item-desc">${m.description || ''}</div>
+      </div>
+      <div class="market-item-right">
+        <div class="market-price">${prefix}${fmtNum(m.price, priceDigits)}</div>
+        <div class="market-change ${cls}">${fmtPct(m.change_pct)}</div>
+      </div>
+    </div>
+  `;
 }
 
 function setMarketTab(tab) {
   state.currentMarketTab = tab;
   renderMarkets();
+}
+
+async function openMarketChart(symbol, name, prefix) {
+  console.log('📊 Abriendo gráfica:', symbol);
+  
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  `;
+  
+  modal.innerHTML = `
+    <div style="background: #1a1a1a; border-radius: 16px; width: 90%; max-width: 700px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="padding: 16px; border-bottom: 1px solid #3a3530; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-size: 16px; font-weight: 600; color: #fff;">${name}</div>
+          <div style="font-size: 12px; color: #999;">${symbol}</div>
+        </div>
+        <button onclick="this.closest('div').parentElement.parentElement.remove()" style="background: none; border: none; color: #ccc; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">×</button>
+      </div>
+      <div id="chart-container" style="flex: 1; padding: 16px; background: #0a0a0a; display: flex; align-items: center; justify-content: center;">
+        <div style="color: #999;">Cargando gráfica...</div>
+      </div>
+      <div style="padding: 12px 16px; border-top: 1px solid #3a3530; font-size: 12px; color: #999;">
+        Últimas 24 horas · Datos en tiempo real
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  await loadChartData(symbol, prefix);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+}
+
+async function loadChartData(symbol, prefix) {
+  try {
+    console.log('📊 Cargando datos para:', symbol);
+    
+    // Detectar qué API usar
+    if (COINGECKO_MAP[symbol]) {
+      console.log('🪙 Usando Coingecko para cripto');
+      await loadCryptoChart(symbol, prefix);
+    } else if (IEX_BLOCKED.includes(symbol)) {
+      console.log('⚠️ Símbolo no soportado en APIs');
+      showChartError('Gráficas no disponibles para este símbolo');
+    } else {
+      console.log('📈 Usando IEX Cloud para acciones');
+      await loadStockChart(symbol, prefix);
+    }
+  } catch (err) {
+    console.error('Error loadChartData:', err);
+    showChartError('Error: ' + err.message);
+  }
+}
+
+async function loadStockChart(symbol, prefix) {
+  const url = `https://cloud.iexapis.com/stable/stock/${symbol}/intraday-prices?token=${IEX_API_KEY}`;
+  
+  try {
+    const res = await fetch(url);
+    
+    // Validar que sea JSON válido
+    const text = await res.text();
+    if (!text.startsWith('[') && !text.startsWith('{')) {
+      throw new Error('Símbolo no válido en IEX Cloud');
+    }
+    
+    const data = JSON.parse(text);
+    
+    if (!data || data.length === 0) {
+      showChartError('Sin datos disponibles');
+      return;
+    }
+    
+    console.log('📈 Datos IEX:', data.length, 'puntos');
+    
+    const chartData = data.slice(-24).map(d => ({
+      time: d.label,
+      close: d.close,
+      open: d.open,
+      high: d.high,
+      low: d.low,
+    }));
+    
+    renderChart(chartData, data[data.length - 1].close, prefix);
+  } catch (err) {
+    console.error('IEX error:', err);
+    showChartError('No hay gráfica disponible para este símbolo');
+  }
+}
+
+async function loadCryptoChart(symbol, prefix) {
+  const coinId = COINGECKO_MAP[symbol];
+  const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=1&interval=hourly`;
+  
+  try {
+    const res = await fetch(url);
+    
+    if (!res.ok) {
+      throw new Error(`Error ${res.status}`);
+    }
+    
+    const data = await res.json();
+    
+    if (!data.prices || data.prices.length === 0) {
+      showChartError('Sin datos de cripto');
+      return;
+    }
+    
+    console.log('🪙 Datos Coingecko:', data.prices.length, 'puntos');
+    
+    const chartData = data.prices.slice(-24).map((p, i) => {
+      const prevPrice = i > 0 ? data.prices[i - 1][1] : p[1];
+      return {
+        time: new Date(p[0]).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        close: p[1],
+        open: prevPrice,
+        high: p[1] * 1.01,
+        low: p[1] * 0.99,
+      };
+    });
+    
+    renderChart(chartData, data.prices[data.prices.length - 1][1], prefix);
+  } catch (err) {
+    console.error('Coingecko error:', err);
+    showChartError('Error cargando datos de cripto');
+  }
+}
+
+function renderChart(data, currentPrice, prefix) {
+  const container = document.getElementById('chart-container');
+  if (!container) return;
+  drawCandleChart(data, currentPrice, container, prefix);
+}
+
+function drawCandleChart(data, currentPrice, container, prefix) {
+  const min = Math.min(...data.map(d => d.low));
+  const max = Math.max(...data.map(d => d.high));
+  const range = max - min;
+  
+  let html = `
+    <div style="width: 100%; height: 100%; display: flex; flex-direction: column;">
+      <div style="flex: 1; display: flex; align-items: flex-end; gap: 4px; padding: 20px 10px; position: relative;">
+  `;
+  
+  const yLabels = [max, max * 0.75, max * 0.5, max * 0.25, min];
+  html += `<div style="position: absolute; left: 0; top: 0; height: 100%; width: 60px; display: flex; flex-direction: column; justify-content: space-around; font-size: 10px; color: #666; padding: 20px 5px; box-sizing: border-box;">`;
+  yLabels.forEach(price => {
+    html += `<div style="text-align: right;">${price.toFixed(0)}</div>`;
+  });
+  html += `</div>`;
+  
+  html += `<div style="flex: 1; display: flex; align-items: flex-end; gap: 3px; margin-left: 60px;">`;
+  
+  data.forEach((d, i) => {
+    const highNorm = ((d.high - min) / range) * 100;
+    const lowNorm = ((d.low - min) / range) * 100;
+    const closeNorm = ((d.close - min) / range) * 100;
+    
+    const isGreen = d.close >= d.open;
+    const wickColor = isGreen ? '#6fae5f' : '#d66a5c';
+    const bodyColor = isGreen ? '#6fae5f' : '#d66a5c';
+    
+    html += `
+      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;">
+        <div style="width: 2px; height: ${highNorm - lowNorm}%; background: ${wickColor}; opacity: 0.5;"></div>
+        <div style="width: 6px; height: ${Math.max(3, Math.abs(closeNorm - (((d.open - min) / range) * 100)))}%; background: ${bodyColor}; border: 1px solid ${bodyColor}; opacity: 0.8;"></div>
+        <div style="font-size: 9px; color: #666; margin-top: 4px; white-space: nowrap;">
+          ${typeof d.time === 'string' ? d.time.split(':')[0] : new Date(d.time).getHours()}h
+        </div>
+      </div>
+    `;
+  });
+  
+  html += `
+      </div>
+    </div>
+    <div style="text-align: center; padding: 12px; font-size: 18px; font-weight: 600; color: #c9a961; border-top: 1px solid #2a2a2a;">
+      ${prefix}${currentPrice.toFixed(2)}
+    </div>
+  `;
+  
+  container.innerHTML = html;
+}
+
+function showChartError(msg) {
+  const container = document.getElementById('chart-container');
+  if (container) {
+    container.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #d66a5c; text-align: center; padding: 20px;">
+        <div>
+          <div style="font-size: 14px; margin-bottom: 8px;">⚠️</div>
+          ${msg}
+        </div>
+      </div>
+    `;
+  }
 }
 
 const TOPICS = [
@@ -339,7 +582,57 @@ function renderProfileModal() {
   const email = user.email || '';
   const isPrem = isPremium();
   const planBadge = isPrem ? `<span style="background:#2a6b3a;color:#7fd89a;padding:3px 10px;border-radius:20px;font-size:12px;">Premium</span>` : `<span style="background:#2a2a2a;color:#9a958b;padding:3px 10px;border-radius:20px;font-size:12px;">Free</span>`;
-  modal.innerHTML = `<div style="text-align:center;padding:20px 0;"><div style="width:56px;height:56px;border-radius:50%;background:var(--surface-2);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;">${email[0]?.toUpperCase() || '?'}</div><div style="font-size:15px;font-weight:500;">${email}</div><div style="margin-top:8px;">${planBadge}</div></div><button class="cta" id="logout-btn" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);">Cerrar sesión</button>`;
+  
+  modal.innerHTML = `
+    <div style="text-align:center;padding:20px 0;border-bottom:1px solid #3a3530;margin-bottom:20px;">
+      <div style="width:56px;height:56px;border-radius:50%;background:var(--surface-2);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;">${email[0]?.toUpperCase() || '?'}</div>
+      <div style="font-size:15px;font-weight:500;">${email}</div>
+      <div style="margin-top:8px;">${planBadge}</div>
+    </div>
+
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:12px;">AJUSTES</div>
+      
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
+        <div>
+          <div style="font-size:14px;font-weight:500;">Recordatorio diario</div>
+          <div style="font-size:12px;color:var(--ink-dim);">Notificación a las 7:30</div>
+        </div>
+        <input type="checkbox" id="reminder-toggle" ${state.profile?.daily_reminder_enabled ? 'checked' : ''} onchange="toggleDailyReminder()" style="cursor:pointer;width:18px;height:18px;">
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
+        <div>
+          <div style="font-size:14px;font-weight:500;">Tema oscuro</div>
+          <div style="font-size:12px;color:var(--ink-dim);">Activado siempre</div>
+        </div>
+        <input type="checkbox" checked disabled style="cursor:not-allowed;width:18px;height:18px;opacity:0.5;">
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
+        <div>
+          <div style="font-size:14px;font-weight:500;">Guardar offline</div>
+          <div style="font-size:12px;color:var(--ink-dim);">Lee sin conexión</div>
+        </div>
+        <input type="checkbox" id="offline-toggle" ${localStorage.getItem('lente.offline-mode') === '1' ? 'checked' : ''} onchange="toggleOfflineMode()" style="cursor:pointer;width:18px;height:18px;">
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+        <div>
+          <div style="font-size:14px;font-weight:500;">Instalar app</div>
+          <div style="font-size:12px;color:var(--ink-dim);">PWA en tu dispositivo</div>
+        </div>
+        <button onclick="installPWAFromModal()" style="padding:6px 12px;background:#c9a961;border:none;border-radius:6px;color:#1a1a1a;font-size:12px;font-weight:600;cursor:pointer;">
+          ${isStandalone ? '✓ Instalada' : 'Instalar'}
+        </button>
+      </div>
+    </div>
+
+    <button class="cta" id="logout-btn" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);">
+      Cerrar sesión
+    </button>
+  `;
+  
   const logoutBtn = $('logout-btn');
   if (logoutBtn) logoutBtn.onclick = signOut;
 }
@@ -360,7 +653,6 @@ async function signOut() {
     updateProfileBtn();
     toast('Sesión cerrada ✓');
 
-    // Supabase hace su trabajo en background, sin esperar
     supabaseClient.auth.signOut().catch(err => console.error('Error en signOut bg:', err));
 
     setTimeout(() => { window.location.href = location.origin; }, 600);
@@ -376,22 +668,47 @@ async function toggleDailyReminder() {
     if (!state.session) { openLoginModal(); return; }
     const user = state.session?.user;
     if (!user) return;
-    const btn = $('reminder-btn');
     const isEnabled = state.profile?.daily_reminder_enabled || false;
     const { error } = await supabaseClient.from('profiles').update({ daily_reminder_enabled: !isEnabled }).eq('id', user.id);
     if (error) throw error;
     state.profile.daily_reminder_enabled = !isEnabled;
     localStorage.setItem('lente.profile', JSON.stringify(state.profile));
-    if (!isEnabled) {
-      if (btn) { btn.textContent = '✓ Recordatorio activado'; btn.style.background = 'rgba(201, 169, 97, 0.2)'; }
-      toast('Recordatorios activados ✓');
-    } else {
-      if (btn) { btn.textContent = 'Activar recordatorio diario'; btn.style.background = ''; }
-      toast('Recordatorios desactivados');
-    }
+    toast(!isEnabled ? '✓ Recordatorios activados' : '✓ Recordatorios desactivados');
   } catch (err) {
     console.error('Error recordatorio:', err);
     toast('Error');
+  }
+}
+
+function toggleOfflineMode() {
+  const isEnabled = localStorage.getItem('lente.offline-mode') === '1';
+  if (!isEnabled) {
+    localStorage.setItem('lente.offline-mode', '1');
+    toast('Modo offline activado');
+  } else {
+    localStorage.removeItem('lente.offline-mode');
+    toast('Modo offline desactivado');
+  }
+}
+
+async function installPWAFromModal() {
+  if (deferredPrompt) {
+    try {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        toast('¡App instalada! 🎉');
+        renderProfileModal();
+      }
+      deferredPrompt = null;
+    } catch (err) {
+      console.error('Error instalación:', err);
+      toast('Error al instalar');
+    }
+  } else if (isIOS || (isSafari && !isAndroid)) {
+    showIOSInstallGuide();
+  } else {
+    alert('Tu navegador no soporta instalación de PWA. Intenta abrir el menú y busca "Instalar app".');
   }
 }
 
@@ -472,20 +789,10 @@ function updateProfileBtn() {
 async function setupAuthListener() {
   if (authListenerInitialized) return;
   authListenerInitialized = true;
-  
   try {
     await waitForSupabase();
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔐 Auth event:', event);
-      
-      // IGNORAR eventos iniciales si ya está inicializado
-      if (!appReady && event === 'SIGNED_IN') {
-        console.log('🔐 Ignorando SIGNED_IN inicial (appReady aún no)');
-        return;
-      }
-      
       state.session = session;
-      
       if (event === 'SIGNED_IN' && session) {
         loadProfileFromLocalStorage();
         await loadProfile(session.user.id);
@@ -505,13 +812,11 @@ async function setupAuthListener() {
   }
 }
 
-// ✅ PASO 1: Resolver sesión ANTES de arrancar la app
 async function initAuth() {
   try {
     await waitForSupabase();
     const { data: { session } } = await supabaseClient.auth.getSession();
     state.session = session;
-    
     if (session) {
       loadProfileFromLocalStorage();
       await Promise.all([
@@ -524,7 +829,6 @@ async function initAuth() {
   }
 }
 
-// ✅ PASO 2: Cargar feed
 async function startApp() {
   try {
     await loadFeed();
@@ -533,26 +837,12 @@ async function startApp() {
   }
 }
 
-// ✅ PASO 3: Secuencia correcta
 async function init() {
   console.log('🚀 Inicializando app...');
-  
-  // 1. Resolver auth PRIMERO
   await initAuth();
-  console.log('✓ Auth resuelto, sesión:', !!state.session);
-  
-  // 2. Actualizar UI
   updateProfileBtn();
-  
-  // 3. Cargar feed
   await startApp();
-  console.log('✓ Feed cargado');
-  
-  // 4. Registrar listener SOLO para cambios posteriores
   await setupAuthListener();
-  console.log('✓ Listener registrado');
-  
-  // 5. Marcar como listo
   appReady = true;
   console.log('✅ App lista');
 }
@@ -564,87 +854,48 @@ if (document.readyState === 'loading') {
 }
 
 // ============================================================
-// PWA INSTALL — Versión corregida
+// PWA INSTALL
 // ============================================================
 
-let deferredPrompt = null;
-let installPromptShown = false;
-
-// Capturar beforeinstallprompt CORRECTAMENTE
-window.addEventListener('beforeinstallprompt', (e) => {
-  console.log('📦 beforeinstallprompt capturado');
-  e.preventDefault();
-  deferredPrompt = e;
-  
-  // Mostrar banner después de 3 segundos
-  if (!localStorage.getItem('lente.install.dismissed') && !installPromptShown) {
-    setTimeout(() => {
-      console.log('📦 Mostrando install prompt');
-      const banner = $('install-prompt');
-      if (banner) {
-        banner.classList.add('show');
-        installPromptShown = true;
-      }
-    }, 3000);
-  }
-});
-
-// Detectar si ya está instalada
-window.addEventListener('appinstalled', () => {
-  console.log('📦 App instalada!');
-  deferredPrompt = null;
-  const banner = $('install-prompt');
-  if (banner) banner.classList.remove('show');
-});
-
-// En display: standalone (ya instalada)
-if (window.navigator.standalone === true) {
-  console.log('📦 Running as installed PWA');
-  const banner = $('install-prompt');
-  if (banner) banner.style.display = 'none';
-}
-
-async function installPWA() {
-  console.log('📦 installPWA() llamado, deferredPrompt:', !!deferredPrompt);
-  
-  if (!deferredPrompt) {
-    console.error('❌ deferredPrompt es null');
-    alert('La instalación no está disponible en este navegador');
-    return;
-  }
-
-  try {
-    // Mostrar el diálogo nativo
-    deferredPrompt.prompt();
-    
-    // Esperar respuesta
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log('📦 User choice:', outcome);
-    
-    if (outcome === 'accepted') {
-      console.log('✅ App instalada!');
-      toast('¡App instalada! 🎉');
-      const banner = $('install-prompt');
-      if (banner) banner.classList.remove('show');
-    } else {
-      console.log('❌ User rechazó instalación');
-      toast('Instalación cancelada');
-    }
-    
+if ((isChrome || isEdge) && !isIOS) {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+  });
+  window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
-  } catch (err) {
-    console.error('❌ Error instalación:', err);
-    toast('Error al instalar');
-  }
+  });
 }
 
-function dismissInstall() {
-  console.log('📦 Dismiss install');
-  const banner = $('install-prompt');
-  if (banner) banner.classList.remove('show');
-  localStorage.setItem('lente.install.dismissed', '1');
-}
-
-function showInstallGuide() {
-  alert('Abre el menú del navegador (⋮) y selecciona "Instalar app"');
+function showIOSInstallGuide() {
+  const html = `
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;">
+      <div style="background: #1a1a1a; border-radius: 16px; padding: 24px; max-width: 320px; text-align: center; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+        <h2 style="margin: 0 0 16px; font-size: 18px; font-weight: 600;">Instalar lente</h2>
+        <p style="margin: 0 0 20px; font-size: 14px; color: #ccc; line-height: 1.4;">
+          Pasos para añadir la app a tu pantalla de inicio:
+        </p>
+        <div style="background: #2a2a2a; border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left; font-size: 13px; line-height: 1.6;">
+          <div style="margin-bottom: 12px;">
+            <strong style="display: block; margin-bottom: 4px;">1️⃣ Pulsa el botón compartir</strong>
+            <span style="color: #999;">(icono ⬆️ abajo)</span>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <strong style="display: block; margin-bottom: 4px;">2️⃣ Desplaza hacia abajo</strong>
+            <span style="color: #999;">y busca "Añadir a pantalla de inicio"</span>
+          </div>
+          <div>
+            <strong style="display: block; margin-bottom: 4px;">3️⃣ Pulsa "Añadir"</strong>
+            <span style="color: #999;">¡Listo! La app aparecerá en tu home</span>
+          </div>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" style="width: 100%; padding: 10px; background: #c9a961; border: none; border-radius: 8px; color: #1a1a1a; font-weight: 600; cursor: pointer;">
+          Entendido
+        </button>
+      </div>
+    </div>
+  `;
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  document.body.appendChild(div.firstElementChild);
 }
