@@ -1,12 +1,11 @@
 // ============================================================
-// /public/app.js — VERSIÓN v20 CON VALIDACIÓN DE APIS
-// IEX Cloud + Coingecko con fallback
+// /public/app.js — VERSIÓN v22 CON TRADINGVIEW
+// Gráficas profesionales de TradingView
 // ============================================================
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
 const IEX_API_KEY = '69edd891614886.20624499';
 
-// Mapeo de símbolos a IDs de Coingecko
 const COINGECKO_MAP = {
   'BTC-USD': 'bitcoin',
   'ETH-USD': 'ethereum',
@@ -15,16 +14,28 @@ const COINGECKO_MAP = {
   'SOL-USD': 'solana',
 };
 
-// Símbolos que NO funcionan en IEX (divisas, etc)
-const IEX_BLOCKED = ['EURUSD=X', 'EURGBP=X', '^STOXX50E', '^NDX', 'GC=F', 'BZ=F', 'TTF=F'];
+// Mapeo a símbolos TradingView
+const TRADINGVIEW_MAP = {
+  '^IBEX': 'IBEX:IBEX',
+  'AAPL': 'NASDAQ:AAPL',
+  'MSFT': 'NASDAQ:MSFT',
+  'GOOGL': 'NASDAQ:GOOGL',
+  'AMZN': 'NASDAQ:AMZN',
+  'TSLA': 'NASDAQ:TSLA',
+  '^GSPC': 'FOREXCOM:SPX500',
+  'BTC-USD': 'BINANCE:BTCUSDT',
+  'ETH-USD': 'BINANCE:ETHUSDT',
+  'EURUSD=X': 'FX:EURUSD',
+};
+
+const IEX_BLOCKED = ['GC=F', 'BZ=F', 'TTF=F', 'EURGBP=X'];
 
 let supabaseClient = null;
 let supabaseReady = false;
 let authListenerInitialized = false;
 let appReady = false;
-
-// PWA Install
 let deferredPrompt = null;
+
 const ua = navigator.userAgent.toLowerCase();
 const isIOS = /iphone|ipad|ipod/.test(ua);
 const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
@@ -250,7 +261,9 @@ function setMarketTab(tab) {
 }
 
 async function openMarketChart(symbol, name, prefix) {
-  console.log('📊 Abriendo gráfica:', symbol);
+  console.log('📊 Abriendo gráfica TradingView:', symbol);
+  
+  const tvSymbol = TRADINGVIEW_MAP[symbol] || symbol;
   
   const modal = document.createElement('div');
   modal.style.cssText = `
@@ -267,7 +280,7 @@ async function openMarketChart(symbol, name, prefix) {
   `;
   
   modal.innerHTML = `
-    <div style="background: #1a1a1a; border-radius: 16px; width: 90%; max-width: 700px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
+    <div style="background: #1a1a1a; border-radius: 16px; width: 95%; max-width: 900px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;">
       <div style="padding: 16px; border-bottom: 1px solid #3a3530; display: flex; justify-content: space-between; align-items: center;">
         <div>
           <div style="font-size: 16px; font-weight: 600; color: #fff;">${name}</div>
@@ -275,184 +288,56 @@ async function openMarketChart(symbol, name, prefix) {
         </div>
         <button onclick="this.closest('div').parentElement.parentElement.remove()" style="background: none; border: none; color: #ccc; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">×</button>
       </div>
-      <div id="chart-container" style="flex: 1; padding: 16px; background: #0a0a0a; display: flex; align-items: center; justify-content: center;">
-        <div style="color: #999;">Cargando gráfica...</div>
-      </div>
-      <div style="padding: 12px 16px; border-top: 1px solid #3a3530; font-size: 12px; color: #999;">
-        Últimas 24 horas · Datos en tiempo real
-      </div>
+      <div id="tradingview-chart-${symbol}" style="flex: 1; padding: 0; background: #0a0a0a;"></div>
     </div>
   `;
   
   document.body.appendChild(modal);
-  await loadChartData(symbol, prefix);
+  
+  // Cargar TradingView script si no está
+  if (!window.TradingView) {
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/tv.js';
+    script.async = true;
+    script.onload = () => {
+      renderTradingViewChart(symbol, tvSymbol);
+    };
+    document.body.appendChild(script);
+  } else {
+    renderTradingViewChart(symbol, tvSymbol);
+  }
+  
   modal.addEventListener('click', (e) => {
     if (e.target === modal) modal.remove();
   });
 }
 
-async function loadChartData(symbol, prefix) {
+function renderTradingViewChart(symbol, tvSymbol) {
   try {
-    console.log('📊 Cargando datos para:', symbol);
-    
-    // Detectar qué API usar
-    if (COINGECKO_MAP[symbol]) {
-      console.log('🪙 Usando Coingecko para cripto');
-      await loadCryptoChart(symbol, prefix);
-    } else if (IEX_BLOCKED.includes(symbol)) {
-      console.log('⚠️ Símbolo no soportado en APIs');
-      showChartError('Gráficas no disponibles para este símbolo');
-    } else {
-      console.log('📈 Usando IEX Cloud para acciones');
-      await loadStockChart(symbol, prefix);
-    }
-  } catch (err) {
-    console.error('Error loadChartData:', err);
-    showChartError('Error: ' + err.message);
-  }
-}
-
-async function loadStockChart(symbol, prefix) {
-  const url = `https://cloud.iexapis.com/stable/stock/${symbol}/intraday-prices?token=${IEX_API_KEY}`;
-  
-  try {
-    const res = await fetch(url);
-    
-    // Validar que sea JSON válido
-    const text = await res.text();
-    if (!text.startsWith('[') && !text.startsWith('{')) {
-      throw new Error('Símbolo no válido en IEX Cloud');
-    }
-    
-    const data = JSON.parse(text);
-    
-    if (!data || data.length === 0) {
-      showChartError('Sin datos disponibles');
-      return;
-    }
-    
-    console.log('📈 Datos IEX:', data.length, 'puntos');
-    
-    const chartData = data.slice(-24).map(d => ({
-      time: d.label,
-      close: d.close,
-      open: d.open,
-      high: d.high,
-      low: d.low,
-    }));
-    
-    renderChart(chartData, data[data.length - 1].close, prefix);
-  } catch (err) {
-    console.error('IEX error:', err);
-    showChartError('No hay gráfica disponible para este símbolo');
-  }
-}
-
-async function loadCryptoChart(symbol, prefix) {
-  const coinId = COINGECKO_MAP[symbol];
-  const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=1&interval=hourly`;
-  
-  try {
-    const res = await fetch(url);
-    
-    if (!res.ok) {
-      throw new Error(`Error ${res.status}`);
-    }
-    
-    const data = await res.json();
-    
-    if (!data.prices || data.prices.length === 0) {
-      showChartError('Sin datos de cripto');
-      return;
-    }
-    
-    console.log('🪙 Datos Coingecko:', data.prices.length, 'puntos');
-    
-    const chartData = data.prices.slice(-24).map((p, i) => {
-      const prevPrice = i > 0 ? data.prices[i - 1][1] : p[1];
-      return {
-        time: new Date(p[0]).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-        close: p[1],
-        open: prevPrice,
-        high: p[1] * 1.01,
-        low: p[1] * 0.99,
-      };
+    new TradingView.widget({
+      "container_id": `tradingview-chart-${symbol}`,
+      "autosize": true,
+      "symbol": tvSymbol,
+      "interval": "D",
+      "timezone": "Europe/Madrid",
+      "theme": "dark",
+      "style": "1",
+      "locale": "es",
+      "toolbar_bg": "#1a1a1a",
+      "enable_publishing": false,
+      "allow_symbol_change": false,
+      "hide_side_toolbar": false,
+      "details": true,
+      "hotlist": false,
+      "calendar": false,
+      "studies": ["Volume@tv-basicstudies"]
     });
-    
-    renderChart(chartData, data.prices[data.prices.length - 1][1], prefix);
   } catch (err) {
-    console.error('Coingecko error:', err);
-    showChartError('Error cargando datos de cripto');
-  }
-}
-
-function renderChart(data, currentPrice, prefix) {
-  const container = document.getElementById('chart-container');
-  if (!container) return;
-  drawCandleChart(data, currentPrice, container, prefix);
-}
-
-function drawCandleChart(data, currentPrice, container, prefix) {
-  const min = Math.min(...data.map(d => d.low));
-  const max = Math.max(...data.map(d => d.high));
-  const range = max - min;
-  
-  let html = `
-    <div style="width: 100%; height: 100%; display: flex; flex-direction: column;">
-      <div style="flex: 1; display: flex; align-items: flex-end; gap: 4px; padding: 20px 10px; position: relative;">
-  `;
-  
-  const yLabels = [max, max * 0.75, max * 0.5, max * 0.25, min];
-  html += `<div style="position: absolute; left: 0; top: 0; height: 100%; width: 60px; display: flex; flex-direction: column; justify-content: space-around; font-size: 10px; color: #666; padding: 20px 5px; box-sizing: border-box;">`;
-  yLabels.forEach(price => {
-    html += `<div style="text-align: right;">${price.toFixed(0)}</div>`;
-  });
-  html += `</div>`;
-  
-  html += `<div style="flex: 1; display: flex; align-items: flex-end; gap: 3px; margin-left: 60px;">`;
-  
-  data.forEach((d, i) => {
-    const highNorm = ((d.high - min) / range) * 100;
-    const lowNorm = ((d.low - min) / range) * 100;
-    const closeNorm = ((d.close - min) / range) * 100;
-    
-    const isGreen = d.close >= d.open;
-    const wickColor = isGreen ? '#6fae5f' : '#d66a5c';
-    const bodyColor = isGreen ? '#6fae5f' : '#d66a5c';
-    
-    html += `
-      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;">
-        <div style="width: 2px; height: ${highNorm - lowNorm}%; background: ${wickColor}; opacity: 0.5;"></div>
-        <div style="width: 6px; height: ${Math.max(3, Math.abs(closeNorm - (((d.open - min) / range) * 100)))}%; background: ${bodyColor}; border: 1px solid ${bodyColor}; opacity: 0.8;"></div>
-        <div style="font-size: 9px; color: #666; margin-top: 4px; white-space: nowrap;">
-          ${typeof d.time === 'string' ? d.time.split(':')[0] : new Date(d.time).getHours()}h
-        </div>
-      </div>
-    `;
-  });
-  
-  html += `
-      </div>
-    </div>
-    <div style="text-align: center; padding: 12px; font-size: 18px; font-weight: 600; color: #c9a961; border-top: 1px solid #2a2a2a;">
-      ${prefix}${currentPrice.toFixed(2)}
-    </div>
-  `;
-  
-  container.innerHTML = html;
-}
-
-function showChartError(msg) {
-  const container = document.getElementById('chart-container');
-  if (container) {
-    container.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #d66a5c; text-align: center; padding: 20px;">
-        <div>
-          <div style="font-size: 14px; margin-bottom: 8px;">⚠️</div>
-          ${msg}
-        </div>
-      </div>
-    `;
+    console.error('Error TradingView:', err);
+    const container = document.getElementById(`tradingview-chart-${symbol}`);
+    if (container) {
+      container.innerHTML = '<div style="color: #d66a5c; padding: 20px; text-align: center;">Error cargando gráfica. Intenta de nuevo.</div>';
+    }
   }
 }
 
@@ -589,48 +474,26 @@ function renderProfileModal() {
       <div style="font-size:15px;font-weight:500;">${email}</div>
       <div style="margin-top:8px;">${planBadge}</div>
     </div>
-
     <div style="margin-bottom:20px;">
       <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:12px;">AJUSTES</div>
-      
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
-        <div>
-          <div style="font-size:14px;font-weight:500;">Recordatorio diario</div>
-          <div style="font-size:12px;color:var(--ink-dim);">Notificación a las 7:30</div>
-        </div>
+        <div><div style="font-size:14px;font-weight:500;">Recordatorio diario</div><div style="font-size:12px;color:var(--ink-dim);">Notificación a las 7:30</div></div>
         <input type="checkbox" id="reminder-toggle" ${state.profile?.daily_reminder_enabled ? 'checked' : ''} onchange="toggleDailyReminder()" style="cursor:pointer;width:18px;height:18px;">
       </div>
-
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
-        <div>
-          <div style="font-size:14px;font-weight:500;">Tema oscuro</div>
-          <div style="font-size:12px;color:var(--ink-dim);">Activado siempre</div>
-        </div>
+        <div><div style="font-size:14px;font-weight:500;">Tema oscuro</div><div style="font-size:12px;color:var(--ink-dim);">Activado siempre</div></div>
         <input type="checkbox" checked disabled style="cursor:not-allowed;width:18px;height:18px;opacity:0.5;">
       </div>
-
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
-        <div>
-          <div style="font-size:14px;font-weight:500;">Guardar offline</div>
-          <div style="font-size:12px;color:var(--ink-dim);">Lee sin conexión</div>
-        </div>
+        <div><div style="font-size:14px;font-weight:500;">Guardar offline</div><div style="font-size:12px;color:var(--ink-dim);">Lee sin conexión</div></div>
         <input type="checkbox" id="offline-toggle" ${localStorage.getItem('lente.offline-mode') === '1' ? 'checked' : ''} onchange="toggleOfflineMode()" style="cursor:pointer;width:18px;height:18px;">
       </div>
-
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
-        <div>
-          <div style="font-size:14px;font-weight:500;">Instalar app</div>
-          <div style="font-size:12px;color:var(--ink-dim);">PWA en tu dispositivo</div>
-        </div>
-        <button onclick="installPWAFromModal()" style="padding:6px 12px;background:#c9a961;border:none;border-radius:6px;color:#1a1a1a;font-size:12px;font-weight:600;cursor:pointer;">
-          ${isStandalone ? '✓ Instalada' : 'Instalar'}
-        </button>
+        <div><div style="font-size:14px;font-weight:500;">Instalar app</div><div style="font-size:12px;color:var(--ink-dim);">PWA en tu dispositivo</div></div>
+        <button onclick="installPWAFromModal()" style="padding:6px 12px;background:#c9a961;border:none;border-radius:6px;color:#1a1a1a;font-size:12px;font-weight:600;cursor:pointer;">${isStandalone ? '✓ Instalada' : 'Instalar'}</button>
       </div>
     </div>
-
-    <button class="cta" id="logout-btn" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);">
-      Cerrar sesión
-    </button>
+    <button class="cta" id="logout-btn" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);">Cerrar sesión</button>
   `;
   
   const logoutBtn = $('logout-btn');
@@ -641,20 +504,15 @@ async function signOut() {
   try {
     const modal = $('profile-modal');
     if (modal) modal.classList.remove('open');
-
     const saved = localStorage.getItem('lente.saved');
     localStorage.clear();
     if (saved) localStorage.setItem('lente.saved', saved);
-
     state.session = null;
     state.profile = null;
     state.savedIds.clear();
-
     updateProfileBtn();
     toast('Sesión cerrada ✓');
-
     supabaseClient.auth.signOut().catch(err => console.error('Error en signOut bg:', err));
-
     setTimeout(() => { window.location.href = location.origin; }, 600);
   } catch (err) {
     console.error('Error logout:', err);
@@ -853,10 +711,6 @@ if (document.readyState === 'loading') {
   init();
 }
 
-// ============================================================
-// PWA INSTALL
-// ============================================================
-
 if ((isChrome || isEdge) && !isIOS) {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -868,33 +722,7 @@ if ((isChrome || isEdge) && !isIOS) {
 }
 
 function showIOSInstallGuide() {
-  const html = `
-    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;">
-      <div style="background: #1a1a1a; border-radius: 16px; padding: 24px; max-width: 320px; text-align: center; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-        <h2 style="margin: 0 0 16px; font-size: 18px; font-weight: 600;">Instalar lente</h2>
-        <p style="margin: 0 0 20px; font-size: 14px; color: #ccc; line-height: 1.4;">
-          Pasos para añadir la app a tu pantalla de inicio:
-        </p>
-        <div style="background: #2a2a2a; border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left; font-size: 13px; line-height: 1.6;">
-          <div style="margin-bottom: 12px;">
-            <strong style="display: block; margin-bottom: 4px;">1️⃣ Pulsa el botón compartir</strong>
-            <span style="color: #999;">(icono ⬆️ abajo)</span>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <strong style="display: block; margin-bottom: 4px;">2️⃣ Desplaza hacia abajo</strong>
-            <span style="color: #999;">y busca "Añadir a pantalla de inicio"</span>
-          </div>
-          <div>
-            <strong style="display: block; margin-bottom: 4px;">3️⃣ Pulsa "Añadir"</strong>
-            <span style="color: #999;">¡Listo! La app aparecerá en tu home</span>
-          </div>
-        </div>
-        <button onclick="this.parentElement.parentElement.remove()" style="width: 100%; padding: 10px; background: #c9a961; border: none; border-radius: 8px; color: #1a1a1a; font-weight: 600; cursor: pointer;">
-          Entendido
-        </button>
-      </div>
-    </div>
-  `;
+  const html = `<div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;"><div style="background: #1a1a1a; border-radius: 16px; padding: 24px; max-width: 320px; text-align: center; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><h2 style="margin: 0 0 16px; font-size: 18px; font-weight: 600;">Instalar lente</h2><p style="margin: 0 0 20px; font-size: 14px; color: #ccc; line-height: 1.4;">Pasos para añadir la app a tu pantalla de inicio:</p><div style="background: #2a2a2a; border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left; font-size: 13px; line-height: 1.6;"><div style="margin-bottom: 12px;"><strong style="display: block; margin-bottom: 4px;">1️⃣ Pulsa el botón compartir</strong><span style="color: #999;">(icono ⬆️ abajo)</span></div><div style="margin-bottom: 12px;"><strong style="display: block; margin-bottom: 4px;">2️⃣ Desplaza hacia abajo</strong><span style="color: #999;">y busca "Añadir a pantalla de inicio"</span></div><div><strong style="display: block; margin-bottom: 4px;">3️⃣ Pulsa "Añadir"</strong><span style="color: #999;">¡Listo! La app aparecerá en tu home</span></div></div><button onclick="this.parentElement.parentElement.remove()" style="width: 100%; padding: 10px; background: #c9a961; border: none; border-radius: 8px; color: #1a1a1a; font-weight: 600; cursor: pointer;">Entendido</button></div></div>`;
   const div = document.createElement('div');
   div.innerHTML = html;
   document.body.appendChild(div.firstElementChild);
