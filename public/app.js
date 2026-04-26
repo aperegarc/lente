@@ -4,8 +4,6 @@
 // ÚNICA FUENTE DE VERDAD: state.session
 // ============================================================
 
-import { Analytics } from "@vercel/analytics/next"
-
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
 
 let supabaseClient = null;
