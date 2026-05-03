@@ -1,5 +1,6 @@
-// POST /api/stripe/create-checkout-session
-// Body: { "billing": "monthly" | "yearly" }
+// POST /api/stripe/session
+// Body checkout: { "mode": "checkout", "billing": "monthly" | "yearly" }
+// Body portal:   { "mode": "portal" }
 // Header: Authorization: Bearer <supabase_jwt>
 
 import Stripe from 'stripe';
@@ -11,21 +12,65 @@ export default async function handler(req, res) {
   }
 
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
-  const priceMonthly = process.env.STRIPE_PRICE_MONTHLY?.trim();
-  const priceYearly = process.env.STRIPE_PRICE_YEARLY?.trim();
-
   if (!secret || secret.includes('...')) {
     return res.status(500).json({ error: 'STRIPE_SECRET_KEY no configurada' });
   }
 
-  let billing = 'monthly';
+  let body = {};
   try {
-    const body = await readJson(req);
-    if (body?.billing === 'yearly') billing = 'yearly';
+    body = await readJson(req);
   } catch (_) {
-    /* default monthly */
+    body = {};
   }
 
+  const mode = body.mode === 'portal' ? 'portal' : 'checkout';
+
+  const user = await getUserFromToken(req);
+  if (!user?.id) {
+    return res.status(401).json({
+      error: mode === 'checkout' ? 'Inicia sesión para suscribirte' : 'Unauthorized',
+    });
+  }
+
+  const stripe = new Stripe(secret);
+  const base = getDeploymentUrl(req).replace(/\/$/, '');
+
+  if (mode === 'portal') {
+    let admin;
+    try {
+      admin = getSupabaseAdmin();
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+
+    const { data: prof, error } = await admin
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .single();
+
+    if (error || !prof?.stripe_customer_id) {
+      return res.status(400).json({
+        error: 'No hay cuenta de facturación. Suscríbete primero desde Premium.',
+      });
+    }
+
+    try {
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: prof.stripe_customer_id,
+        return_url: `${base}/`,
+      });
+      return res.status(200).json({ url: portal.url });
+    } catch (err) {
+      console.error('[stripe portal]', err.message);
+      return res.status(500).json({ error: err.message || 'Stripe error' });
+    }
+  }
+
+  const priceMonthly = process.env.STRIPE_PRICE_MONTHLY?.trim();
+  const priceYearly = process.env.STRIPE_PRICE_YEARLY?.trim();
+  let billing = 'monthly';
+  if (body?.billing === 'yearly') billing = 'yearly';
   const priceId = billing === 'yearly' ? priceYearly : priceMonthly;
   if (!priceId) {
     return res.status(500).json({
@@ -33,14 +78,6 @@ export default async function handler(req, res) {
     });
   }
 
-  const user = await getUserFromToken(req);
-  if (!user?.id) {
-    return res.status(401).json({ error: 'Inicia sesión para suscribirte' });
-  }
-
-  const stripe = new Stripe(secret);
-
-  const base = getDeploymentUrl(req).replace(/\/$/, '');
   const metadata = { supabase_user_id: user.id };
 
   const sessionParams = {

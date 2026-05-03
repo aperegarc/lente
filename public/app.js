@@ -590,13 +590,13 @@ async function startStripeCheckout(billing) {
       return;
     }
     toast('Te llevamos a Stripe para pagar de forma segura…');
-    const res = await fetch('/api/stripe/create-checkout-session', {
+    const res = await fetch('/api/stripe/session', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ billing }),
+      body: JSON.stringify({ mode: 'checkout', billing }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -618,9 +618,13 @@ async function openStripePortal() {
     } = await supabaseClient.auth.getSession();
     if (!session) return;
     toast('Abriendo el portal de facturación…');
-    const res = await fetch('/api/stripe/create-portal-session', {
+    const res = await fetch('/api/stripe/session', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ mode: 'portal' }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
