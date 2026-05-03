@@ -1349,8 +1349,23 @@
         return;
       }
       try {
-        await apiCall('POST', { action: 'publish_all' });
-        toast(`${approved} tarjetas publicadas al feed`);
+        const approvedRows = state.cards.filter((c) => c.status === 'approved');
+        const editionDates = [
+          ...new Set(approvedRows.map((c) => c.edition_date).filter(Boolean)),
+        ];
+        const body =
+          editionDates.length === 1
+            ? { action: 'publish_all', edition_date: editionDates[0] }
+            : { action: 'publish_all' };
+        const result = await apiCall('POST', body);
+        const n = typeof result.published === 'number' ? result.published : approved;
+        if (n === 0) {
+          toast(
+            'Ninguna tarjeta se publicó (revisa fechas de edición o vuelve a cargar).',
+          );
+        } else {
+          toast(`${n} tarjeta${n === 1 ? '' : 's'} publicada${n === 1 ? '' : 's'} al feed`);
+        }
         await loadCards();
       } catch (err) {
         toast('Error: ' + err.message);

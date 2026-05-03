@@ -72,14 +72,21 @@ export default async function handler(req, res) {
     }
 
     if (action === 'publish_all') {
-      const today = new Date().toISOString().split('T')[0];
-      const { error } = await supabase
+      const editionDate =
+        typeof req.body?.edition_date === 'string'
+          ? req.body.edition_date.trim().slice(0, 10)
+          : '';
+      let q = supabase
         .from('cards')
         .update({ status: 'published', published_at: new Date().toISOString() })
-        .eq('status', 'approved')
-        .eq('edition_date', today);
+        .eq('status', 'approved');
+      if (editionDate && /^\d{4}-\d{2}-\d{2}$/.test(editionDate)) {
+        q = q.eq('edition_date', editionDate);
+      }
+      const { data, error } = await q.select('id');
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true });
+      const published = Array.isArray(data) ? data.length : 0;
+      return res.status(200).json({ ok: true, published });
     }
 
     return res.status(400).json({ error: 'Unknown action', received: action });
