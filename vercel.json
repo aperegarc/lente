@@ -25,7 +25,11 @@
 
   "rewrites": [
     { "source": "/admin", "destination": "/admin.html" },
-    { "source": "/chart/:path*", "destination": "/index.html" }
+    { "source": "/chart/:path*", "destination": "/index.html" },
+    { "source": "/api/cron/ingest", "destination": "/api/crons?job=ingest" },
+    { "source": "/api/cron/generate", "destination": "/api/crons?job=generate" },
+    { "source": "/api/cron/markets-update", "destination": "/api/crons?job=markets-update" },
+    { "source": "/api/cron/markets", "destination": "/api/crons?job=markets" }
   ],
 
   "functions": {

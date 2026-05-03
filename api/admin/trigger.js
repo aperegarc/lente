@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Body debe incluir "job": "ingest" | "generate"' });
   }
 
-  const path = job === 'ingest' ? '/api/cron/ingest' : '/api/cron/generate';
+  const path = job === 'ingest' ? '/api/crons?job=ingest' : '/api/crons?job=generate';
   const url = `${getDeploymentUrl(req)}${path}`;
   console.log(`[trigger] ${job} →`, url);
 
