@@ -192,6 +192,22 @@ const CATEGORY_COLORS = {
   'Energía': 'green', 'España': '', 'Geopolítica': 'blue', 'Inmobiliario': '', 'Laboral': '',
 };
 
+/** Etiquetas en español para pestañas de mercados (vista catálogo / categorías DB) */
+const MARKET_CATEGORY_LABELS = {
+  indices: 'Índices',
+  divisas: 'Divisas',
+  materias: 'Materias primas',
+  cripto: 'Cripto',
+  acciones: 'Acciones',
+};
+
+const MARKET_CATEGORY_ORDER = ['indices', 'divisas', 'materias', 'cripto', 'acciones'];
+
+function marketCategorySortKey(cat) {
+  const i = MARKET_CATEGORY_ORDER.indexOf(cat);
+  return i === -1 ? 100 + cat.charCodeAt(0) : i;
+}
+
 const state = {
   session: null,
   profile: null,
@@ -204,6 +220,7 @@ const state = {
     edition_complete: true,
   },
   markets: { grouped: {}, flat: [], updated_at: null },
+  marketsDisclaimer: null,
   savedIds: new Set(),
   currentScreen: 'today',
   currentMarketTab: 'all',
@@ -372,9 +389,10 @@ async function loadMarkets() {
   marketsList.innerHTML = `<div class="loading">Cargando...</div>`;
   try {
     await waitForSupabase();
-    const res = await fetch(API.markets + '?_t=' + Date.now());
+    const res = await fetch(`${API.markets}?view=universe&_t=${Date.now()}`);
     if (!res.ok) throw new Error('Error');
     state.markets = await res.json();
+    state.marketsDisclaimer = state.markets.disclaimer || null;
     renderMarkets();
     renderTicker();
   } catch (err) {
@@ -385,21 +403,55 @@ async function loadMarkets() {
 function renderMarkets() {
   const marketsList = $('markets-list');
   const tabs = $('market-tabs');
+  const updatedEl = $('markets-updated');
   if (!marketsList || !tabs) return;
-  
-  const cats = Object.keys(state.markets.grouped);
-  tabs.innerHTML = `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` + cats.map(cat => `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${cat}</div>`).join('');
-  
-  const groups = state.currentMarketTab === 'all' ? state.markets.grouped : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
-  
+
+  if (updatedEl) {
+    updatedEl.textContent = state.markets.updated_at
+      ? 'Actualizado · ' +
+        new Date(state.markets.updated_at).toLocaleString('es-ES', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : 'Referencias en vivo y datos orientativos';
+  }
+
+  const cats = Object.keys(state.markets.grouped || {}).sort(
+    (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
+  );
+  const label = (c) => MARKET_CATEGORY_LABELS[c] || c;
+  tabs.innerHTML =
+    `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` +
+    cats.map(
+      (cat) =>
+        `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${label(cat)}</div>`,
+    ).join('');
+
+  const groups =
+    state.currentMarketTab === 'all'
+      ? state.markets.grouped
+      : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
+
+  const sectionOrder = Object.keys(groups).sort(
+    (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
+  );
+
   let html = '';
-  for (const [cat, items] of Object.entries(groups)) {
-    html += `<div class="market-section"><h3 class="market-section-title">${cat}</h3>`;
+  for (const cat of sectionOrder) {
+    const items = groups[cat];
+    if (!items?.length) continue;
+    html += `<div class="market-section"><h3 class="market-section-title">${label(cat)}</h3>`;
     for (const m of items) {
-      const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
+      const cls =
+        m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
       const prefix = m.symbol?.includes('=F') ? '$' : '';
-      const priceDigits = m.price > 1000 ? 0 : m.symbol?.includes('EUR') ? 4 : 2;
-      const tvSymbol = TRADINGVIEW_MAP[m.symbol] || m.symbol;
+      let priceDigits = 2;
+      if (m.price > 1000) priceDigits = 0;
+      else if (m.symbol?.includes('EUR') || m.category === 'divisas') priceDigits = 4;
+      else if (m.category === 'cripto' && m.price != null && m.price < 1) priceDigits = 4;
+      const tvSymbol = m.tv || TRADINGVIEW_MAP[m.symbol] || m.symbol;
       const dsym = escapeAttr(tvSymbol);
       const dname = escapeAttr(m.name);
       html += `
@@ -409,16 +461,19 @@ function renderMarkets() {
             <div class="market-item-desc">${m.description || ''}</div>
           </div>
           <div class="market-item-right">
-            <div class="market-price">${prefix}${fmtNum(m.price, priceDigits)}</div>
-            <div class="market-change ${cls}">${fmtPct(m.change_pct)}</div>
+            <div class="market-price">${m.price != null && !Number.isNaN(+m.price) ? `${prefix}${fmtNum(m.price, priceDigits)}` : '–'}</div>
+            <div class="market-change ${cls}">${m.change_pct != null && !Number.isNaN(+m.change_pct) ? fmtPct(m.change_pct) : '–'}</div>
           </div>
         </div>
       `;
     }
     html += `</div>`;
   }
-  
-  marketsList.innerHTML = html;
+
+  const disc = state.marketsDisclaimer
+    ? `<p class="markets-disclaimer">${state.marketsDisclaimer}</p>`
+    : '';
+  marketsList.innerHTML = html + disc;
   marketsList.querySelectorAll('.market-item').forEach((el) => {
     el.addEventListener('click', () => {
       const sym = el.getAttribute('data-chart');
@@ -1296,8 +1351,28 @@ async function submitLogin() {
     if (!password || password.length < 6) { $('login-status').textContent = 'Mínimo 6 caracteres'; return; }
     $('login-status').textContent = loginMode === 'login' ? 'Entrando...' : 'Creando...';
     if (loginMode === 'register') {
-      const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { emailRedirectTo: location.origin } });
-      if (error) { $('login-status').textContent = error.message; } else if (data?.user) { $('login-status').textContent = '✓ Revisa tu email'; $('login-email').value = ''; $('login-password').value = ''; setTimeout(() => showTab('login'), 1500); }
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: location.origin },
+      });
+      if (error) {
+        $('login-status').textContent = error.message;
+      } else if (data?.session) {
+        // Supabase con "Confirm email" desactivado: sesión inmediata (sin mail)
+        $('login-status').textContent = '✓ Cuenta creada';
+        $('login-email').value = '';
+        $('login-password').value = '';
+        setTimeout(() => {
+          closeLogin();
+          toast('¡Cuenta creada! ✓');
+        }, 400);
+      } else if (data?.user) {
+        $('login-status').textContent = '✓ Revisa tu email para confirmar';
+        $('login-email').value = '';
+        $('login-password').value = '';
+        setTimeout(() => showTab('login'), 1500);
+      }
     } else {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) { $('login-status').textContent = error.message; } else if (data?.session) { $('login-status').textContent = '✓ Sesión iniciada'; setTimeout(() => { closeLogin(); toast('¡Bienvenido! ✓'); }, 500); }
