@@ -50,7 +50,18 @@ export default async function handler(req, res) {
     }
 
     if (action === 'update') {
-      const allowed = ['headline', 'deck', 'body', 'meaning', 'category', 'sources_text', 'read_time_seconds'];
+      const allowed = [
+        'headline',
+        'deck',
+        'body',
+        'meaning',
+        'category',
+        'sources_text',
+        'read_time_seconds',
+        'primary_source_url',
+        'legal_tag',
+        'is_ai_generated',
+      ];
       const clean = {};
       for (const k of allowed) {
         if (updates?.[k] !== undefined) clean[k] = updates[k];

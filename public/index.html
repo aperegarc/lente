@@ -4,10 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0a0a">
+  <meta name="theme-color" content="#F8F9FA">
   <meta name="description" content="Las noticias económicas del día, explicadas en 5 minutos.">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="lente">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.png">
@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
@@ -25,11 +25,16 @@
   <!-- ==================== APP ROOT ==================== -->
   <div id="app">
 
-    <!-- Header -->
+    <!-- Header (Stitch: icono · marca · perfil; mismas acciones) -->
     <header class="app-header">
       <div class="header-top">
+        <div class="header-leading" aria-hidden="true">
+          <span class="header-search-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+          </span>
+        </div>
         <div class="logo">lente<span class="logo-dot"></span></div>
-        <button class="profile-btn" id="profile-btn" onclick="openProfile()">?</button>
+        <button type="button" class="profile-btn" id="profile-btn" onclick="openProfile()">?</button>
       </div>
       <div class="date-row" id="date-row">
         <span class="pulse"></span>
@@ -47,6 +52,9 @@
         <div class="progress-container" id="progress"></div>
         <div class="ticker" id="ticker"></div>
         <div id="feed-list"></div>
+        <footer class="app-legal-bar" role="contentinfo">
+          <p><strong>Aviso legal.</strong> Lente utiliza inteligencia artificial para sintetizar actualidad financiera. La información se ofrece con fines educativos y de agregación de noticias. No constituye asesoramiento financiero, recomendación de inversión ni gestión de instrumentos financieros según la normativa aplicable en España (incl. orientaciones de la CNMV). Consulta siempre fuentes y, si procede, a un profesional autorizado.</p>
+        </footer>
       </section>
 
       <!-- ============ MERCADOS ============ -->
@@ -89,6 +97,30 @@
             <h2>Aún no has guardado nada</h2>
             <p>Toca el icono de marcador en cualquier tarjeta para guardarla aquí.</p>
           </div>
+        </div>
+      </section>
+
+      <!-- ============ GRÁFICO (ruta /chart/:symbol) ============ -->
+      <section class="screen screen-chart" id="screen-chart" aria-hidden="true">
+        <div class="chart-page">
+          <header class="chart-page-toolbar">
+            <button type="button" class="chart-page-back" id="chart-page-back" aria-label="Volver">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <div class="chart-page-titles">
+              <h1 class="chart-page-name" id="chart-page-name">—</h1>
+              <p class="chart-page-symbol" id="chart-page-symbol"></p>
+            </div>
+          </header>
+          <div class="chart-timeframes" id="chart-timeframes" role="tablist" aria-label="Periodo">
+            <button type="button" class="chart-tf-btn active" data-tf="1D" role="tab" aria-selected="true">1D</button>
+            <button type="button" class="chart-tf-btn" data-tf="1W" role="tab" aria-selected="false">1W</button>
+            <button type="button" class="chart-tf-btn" data-tf="1M" role="tab" aria-selected="false">1M</button>
+          </div>
+          <div id="chart-page-loading" class="chart-page-loading">Cargando velas…</div>
+          <div id="chart-page-error" class="chart-page-error" hidden></div>
+          <div id="chart-page-container" class="chart-page-container"></div>
+          <p class="chart-data-foot">Datos: <strong>Finnhub</strong> · Gráfico: Apache ECharts</p>
         </div>
       </section>
 
@@ -137,7 +169,7 @@
         <div class="login-tabs" style="display:flex;gap:8px;margin-bottom:20px;">
           <button id="tab-login" class="cta" style="flex:1;padding:9px;" onclick="showTab('login')">Entrar</button>
           <button id="tab-register" class="cta"
-            style="flex:1;padding:9px;background:transparent;border:1px solid #3a3530;color:#9a958b;"
+            style="flex:1;padding:9px;background:transparent;border:1px solid #c1c8c7;color:#414848;"
             onclick="showTab('register')">Registrarse</button>
         </div>
         <div class="field">

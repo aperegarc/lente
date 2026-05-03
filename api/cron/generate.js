@@ -13,6 +13,9 @@ const MAX_ARTICLES_IN_PROMPT = 90;
 const MAX_CARDS = 7;
 const SNIPPET_LEN = 320;
 
+/** Etiqueta por defecto si el modelo no devuelve `legal_tag` (transparencia IA). */
+const DEFAULT_LEGAL_TAG = 'Resumen asistido por IA · Contenido informativo';
+
 /** Debe coincidir con admin.html y CATEGORY_COLORS en app.js */
 const ALLOWED_CATEGORIES = [
   'Política monetaria',
@@ -66,12 +69,21 @@ CATEGORÍAS (elige UNA por tarjeta; copia el texto EXACTO):
 
 Si la noticia viene claramente de mercados/bolsa (titular sobre cotización, resultados, índices), usa **Bolsa**.`;
 
+const LEGAL_EDITORIAL_RULES = `
+CUMPLIMIENTO EDITORIAL Y TRANSPARENCIA (sin asesoramiento financiero):
+- TRANSFORMACIÓN: No resumas ni parafrasees la noticia línea por línea. Explica con tus palabras el «por qué importa» y el contexto: análisis pedagógico breve que complemente al original, no lo sustituya por completo.
+- NO ASESORAMIENTO: Prohibido imperativos de inversión («Compra», «Vende», «Invierte», «Apuesta por…»). Usa lenguaje descriptivo y condicional («podría afectar», «históricamente suele…», «en escenarios parecidos»). No prometas rentabilidades, ganancias fijas ni «seguridades» de mercado.
+- FUENTES Y ATRIBUCIÓN: Cada tarjeta debe anclarse a los article_ids que recibes; "sources_text" debe reflejar esos medios (nombres recortados si hace falta). No atribuyas a un medio lo que solo dice otro.
+- TRANSPARENCIA IA: Incluye siempre "legal_tag": una frase muy breve en español que deje claro que el texto es informativo y elaborado con asistencia de IA (p. ej. «Resumen asistido por IA — solo informativo»).`;
+
 const SYSTEM_PROMPT = `Eres el editor jefe de lente, una app de noticias económicas diarias para inversores pasivos españoles.
 
 TU LECTOR:
 - Invierte de forma pasiva (fondos indexados, ETFs)
 - No sigue los mercados en tiempo real como un trader
 - Quiere entender el PORQUÉ y **qué le supone a él/ella en la práctica en España**
+
+${LEGAL_EDITORIAL_RULES}
 
 TAREA:
 Te paso una lista numerada de noticias (RSS y APIs como Finnhub: fuentes con "(Finnhub)" suelen ser mercados/divisas). Elige los temas MÁS RELEVANTES del día (entre 3 y ${MAX_CARDS} tarjetas; si hay poco contenido útil, menos). Prioriza diversidad de categorías cuando tenga sentido.
@@ -88,6 +100,7 @@ Responde ÚNICAMENTE con un JSON válido (sin markdown, sin backticks) con esta 
       "deck": "1-2 frases que enganchan y preparan el cuerpo.",
       "body": "Máximo 80 palabras. Sección «Qué ha pasado»: hechos y contexto. Sin jerga sin explicar.",
       "meaning": "Máximo 60 palabras. Redacta como respuesta directa a la pregunta «¿Qué significa esto para ti?»: segunda persona (tú), tono cercano. Conecta con vida real en España cuando aplique: fondos indexados y diversificación, Euríbor/hipoteca variable, depósitos y tipos, planes de pensiones, poder adquisitivo. NO recomiendes comprar ni vender valores concretos.",
+      "legal_tag": "Frase breve: resumen asistido por IA, solo informativo (sin promesas de rentabilidad).",
       "read_time_seconds": 40,
       "sources_text": "Medio1 · Medio2",
       "article_ids": ["uuid-de-la-lista", "otro-uuid-opcional"]
@@ -101,6 +114,7 @@ REGLAS:
 - Agrupa varias notas si cubren el mismo hecho; 1-4 IDs por tarjeta cuando tenga sentido.
 - No inventes cifras; si no hay dato fiable, omítelo.
 - "sources_text": medios tomados de los article_ids (recorta nombres largos).
+- "legal_tag": obligatorio en cada tarjeta (una línea corta en español).
 - Responde SOLO el JSON, sin texto antes ni después.`;
 
 function normalizeTitle(title) {
@@ -177,7 +191,7 @@ export default async function handler(req, res) {
 
   const { data: rawRows, error: fetchErr } = await supabase
     .from('articles')
-    .select('id, title, snippet, source_name, pub_date')
+    .select('id, title, snippet, source_name, pub_date, link')
     .order('pub_date', { ascending: false })
     .limit(500);
 
@@ -206,7 +220,7 @@ export default async function handler(req, res) {
 
   const allowedIds = new Set(articles.map((a) => a.id));
   const articleLines = buildArticleLines(articles);
-  const userMessage = `Lista de noticias (usa solo estos ids en article_ids). Las fuentes "(Finnhub)" suelen ser mercados/bolsa o macro — clasifica bien la categoría y que el campo "meaning" responda en segunda persona a «¿Qué significa esto para ti?» para alguien en España con inversiones pasivas.\n\n${articleLines}\n\nGenera entre 3 y ${MAX_CARDS} tarjetas en JSON. Varía categorías cuando haya temas distintos.`;
+  const userMessage = `Lista de noticias (usa solo estos ids en article_ids). Las fuentes "(Finnhub)" suelen ser mercados/bolsa o macro — clasifica bien la categoría, cumple las reglas de transformación (no copiar literalmente) y sin asesoramiento imperativo. El campo "meaning" debe responder en segunda persona a «¿Qué significa esto para ti?» para alguien en España con inversiones pasivas. Incluye "legal_tag" en cada tarjeta.\n\n${articleLines}\n\nGenera entre 3 y ${MAX_CARDS} tarjetas en JSON. Varía categorías cuando haya temas distintos.`;
 
   let parsed;
   try {
@@ -282,7 +296,10 @@ export default async function handler(req, res) {
       .join(' · ');
 
     try {
-      const { data: saved, error: cardErr } = await supabase
+      const primaryUrl = (linkedArticles[0]?.link || '').trim() || null;
+    const legalTag = ((card.legal_tag || '').trim() || DEFAULT_LEGAL_TAG).slice(0, 280);
+
+    const { data: saved, error: cardErr } = await supabase
         .from('cards')
         .insert({
           cluster_id: savedCluster.id,
@@ -298,6 +315,9 @@ export default async function handler(req, res) {
             return 'Piensa en cómo este contexto encaja con tu horizonte de inversión pasiva y tu situación en España; evita decisiones impulsivas.';
           })(),
           sources_text: card.sources_text || sourcesFallback,
+          primary_source_url: primaryUrl,
+          legal_tag: legalTag,
+          is_ai_generated: true,
           read_time_seconds: card.read_time_seconds || 40,
           status: 'pending',
           edition_date: today,

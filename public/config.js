@@ -15,5 +15,6 @@ window.LENTE_CONFIG = {
     feed:         '/api/feed',
     feedHistory:  '/api/feed-history',
     markets:      '/api/markets',
+    candles:      '/api/candles',
   },
 };

@@ -83,6 +83,9 @@ CREATE TABLE IF NOT EXISTS cards (
   body            text NOT NULL,
   meaning         text NOT NULL,
   sources_text    text,                 -- "Reuters · FT · Bloomberg"
+  primary_source_url text,              -- enlace a la noticia original (cita / agregación)
+  legal_tag       text,                 -- etiqueta transparencia IA (p. ej. EU AI Act)
+  is_ai_generated boolean DEFAULT true,
   read_time_seconds int DEFAULT 40,
   status          text DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','published')),
   generated_at    timestamptz DEFAULT now(),

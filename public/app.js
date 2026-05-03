@@ -1,10 +1,55 @@
 // ============================================================
-// /public/app.js — VERSIÓN v26 FINAL
-// Ticker simple + gráficas TradingView
-// Números y % en vivo, click abre gráfica completa
+// /public/app.js — Mercados: datos Finnhub · gráfico Apache ECharts (no TradingView)
+// Ruta /chart/:symbol (ej. /chart/BINANCE%3ABTCUSDT)
 // ============================================================
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, API } = window.LENTE_CONFIG;
+
+function escapeAttr(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Fila transparencia IA + enlace al original (columnas legal en Supabase). */
+function cardAiSourceRowHtml(c) {
+  const showAi = c.is_ai_generated !== false;
+  const url = String(c.primary_source_url || '').trim();
+  const tag = String(c.legal_tag || '').trim();
+  const badgeTitle = escapeAttr(tag || 'Contenido elaborado con asistencia de IA');
+  const parts = [];
+  if (showAi) {
+    parts.push(
+      `<span class="card-ai-badge" title="${badgeTitle}">Resumen con asistencia de IA</span>`,
+    );
+  }
+  if (url && /^https?:\/\//i.test(url)) {
+    parts.push(
+      `<a class="card-source-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">Leer original</a>`,
+    );
+  } else if (c.sources_text) {
+    parts.push(`<span class="card-source-credit">Fuente: ${escapeHtml(String(c.sources_text))}</span>`);
+  }
+  if (parts.length === 0) return '';
+  return `<div class="card-ai-row">${parts.join('')}</div>`;
+}
+
+/** Rango y resolución Finnhub por botón de periodo */
+const CHART_TF = {
+  '1D': { rangeSec: 86400, resolution: '15' },
+  '1W': { rangeSec: 86400 * 7, resolution: '60' },
+  '1M': { rangeSec: 86400 * 30, resolution: 'D' },
+};
 
 const TRADINGVIEW_MAP = {
   '^IBEX': 'IBEX:IBEX',
@@ -65,6 +110,20 @@ const TRADINGVIEW_MAP = {
   'TTF=F': 'EUREX:FGBL1',
   'SI=F': 'COMEX:SI1!',
 };
+
+/** Misma regla que api/candles.js → Finnhub /crypto/candle (suele exigir plan de pago). */
+function isCryptoChartSymbol(symbol) {
+  const s = String(symbol || '').trim();
+  return (
+    /^BINANCE:/i.test(s) ||
+    /^COINBASE:/i.test(s) ||
+    /^KRAKEN:/i.test(s) ||
+    /^CRYPTO:/i.test(s)
+  );
+}
+
+const CRYPTO_CANDLES_PLAN_MSG =
+  'Las velas de cripto en Finnhub requieren un plan con add-on Crypto. Con el plan gratuito no hay gráfico aquí; prueba una acción o un índice.';
 
 let supabaseClient = null;
 let supabaseReady = false;
@@ -148,6 +207,14 @@ const state = {
   savedIds: new Set(),
   currentScreen: 'today',
   currentMarketTab: 'all',
+  chartTimeframe: '1D',
+  _preChartScreen: 'markets',
+  _chartSymbol: null,
+  _chartName: null,
+  _echartsInstance: null,
+  _lwResize: null,
+  /** true si el usuario llegó al gráfico desde la lista (hay history para back) */
+  _chartHistoryPushed: false,
 };
 
 function isPremium() {
@@ -191,6 +258,10 @@ function fmtPct(n) {
 }
 
 function switchScreen(name) {
+  if (location.pathname.startsWith('/chart/')) {
+    history.replaceState(null, '', '/');
+  }
+  hideChartScreen();
   state.currentScreen = name;
   $$('.screen').forEach(s => s.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
@@ -262,13 +333,14 @@ function renderFeed(filterCategory = null) {
   const upsell = locked
     ? `<section class="card card-upsell"><p class="upsell-text"><strong>${state.feedMeta.locked_count} noticia${state.feedMeta.locked_count === 1 ? '' : 's'} más</strong> en esta edición con <strong>Premium</strong> — 5 €/mes o 20 €/año (histórico + guardar).</p></section>`
     : '';
-  let html = `<section class="card card-intro"><div class="intro-label">${filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día'}</div><h1 class="intro-title">${filterCategory ? `<em>${filterCategory}</em>` : 'Buenos días.'}</h1><p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p><div class="intro-stats"><div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div><div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura</div></div></div></section>${upsell}`;
+  let html = `<section class="card card-intro"><div class="intro-label">${filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día'}</div><p class="intro-ai-disclosure">Contenido del día elaborado o resumido con <strong>asistencia de IA</strong>. Finalidad informativa; no es asesoramiento ni recomendación de inversión.</p><h1 class="intro-title">${filterCategory ? `<em>${filterCategory}</em>` : 'Buenos días.'}</h1><p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p><div class="intro-stats"><div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div><div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura</div></div></div></section>${upsell}`;
   for (const c of cards) {
     const catClass = CATEGORY_COLORS[c.category] || '';
     const saved = state.savedIds.has(c.id);
     const saveLocked = !isPremium();
     const saveClass = `${saved ? 'saved' : ''} ${saveLocked ? 'action-btn-save-lock' : ''}`;
-    html += `<section class="card" data-id="${c.id}"><div class="card-meta"><span class="category ${catClass}">${c.category}</span><span class="read-time">· ${c.read_time_seconds || 40} s</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${c.id}">${c.body}</p><button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${c.meaning}</p></div><div class="card-footer"><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${c.id}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`;
+    const aiRow = cardAiSourceRowHtml(c);
+    html += `<section class="card" data-id="${c.id}"><div class="card-meta"><span class="category ${catClass}">${c.category}</span><span class="read-time">· ${c.read_time_seconds || 40} s</span></div>${aiRow}<h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${c.id}">${c.body}</p><button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${c.meaning}</p></div><div class="card-footer"><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${c.id}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`;
   }
   feedList.innerHTML = html;
 }
@@ -328,9 +400,10 @@ function renderMarkets() {
       const prefix = m.symbol?.includes('=F') ? '$' : '';
       const priceDigits = m.price > 1000 ? 0 : m.symbol?.includes('EUR') ? 4 : 2;
       const tvSymbol = TRADINGVIEW_MAP[m.symbol] || m.symbol;
-      
+      const dsym = escapeAttr(tvSymbol);
+      const dname = escapeAttr(m.name);
       html += `
-        <div class="market-item" style="cursor: pointer;" onclick="openMarketChart('${tvSymbol}', '${m.name}')">
+        <div class="market-item" role="button" tabindex="0" data-chart="${dsym}" data-name="${dname}">
           <div class="market-item-left">
             <div class="market-item-name">${m.name}</div>
             <div class="market-item-desc">${m.description || ''}</div>
@@ -346,6 +419,19 @@ function renderMarkets() {
   }
   
   marketsList.innerHTML = html;
+  marketsList.querySelectorAll('.market-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      const sym = el.getAttribute('data-chart');
+      const name = el.getAttribute('data-name');
+      if (sym) navigateToChart(sym, name || sym);
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        el.click();
+      }
+    });
+  });
 }
 
 function setMarketTab(tab) {
@@ -353,75 +439,299 @@ function setMarketTab(tab) {
   renderMarkets();
 }
 
-async function openMarketChart(tvSymbol, name) {
-  const backdrop = document.createElement('div');
-  backdrop.id = 'chart-modal-backdrop';
-  backdrop.className = 'chart-modal-backdrop';
-
-  const chartId = `tv-${tvSymbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
-
-  backdrop.innerHTML = `
-    <div class="chart-modal">
-      <div class="chart-modal-header">
-        <div>
-          <div class="chart-modal-title">${name}</div>
-          <div class="chart-modal-symbol">${tvSymbol}</div>
-        </div>
-        <button class="chart-modal-close" onclick="closeChartModal()">×</button>
-      </div>
-      <div class="chart-modal-body" id="${chartId}"></div>
-    </div>`;
-
-  document.body.appendChild(backdrop);
-
-  loadTradingViewScript(() => {
-    renderTradingViewChart(chartId, tvSymbol);
-  });
-
-  backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) backdrop.remove();
-  });
+function hideChartScreen() {
+  const sc = $('screen-chart');
+  if (!sc?.classList.contains('active')) return;
+  sc.classList.remove('active');
+  sc.setAttribute('aria-hidden', 'true');
+  $('app')?.classList.remove('app--chart');
+  destroyChartWidget();
 }
 
-function closeChartModal() {
-  document.getElementById('chart-modal-backdrop')?.remove();
+function destroyChartWidget() {
+  if (state._lwResize) {
+    window.removeEventListener('resize', state._lwResize);
+    state._lwResize = null;
+  }
+  if (state._echartsInstance) {
+    try {
+      state._echartsInstance.dispose();
+    } catch (_) { /* noop */ }
+    state._echartsInstance = null;
+  }
 }
 
-function loadTradingViewScript(callback) {
-  if (window.TradingView) {
-    callback();
-  } else {
+function navigateToChart(chartSymbol, displayName) {
+  state._preChartScreen = state.currentScreen;
+  state._chartHistoryPushed = true;
+  history.pushState(
+    { chartName: displayName, chartSymbol },
+    '',
+    `/chart/${encodeURIComponent(chartSymbol)}`,
+  );
+  applyChartRoute(chartSymbol, displayName);
+}
+
+function applyChartRoute(chartSymbol, displayName) {
+  destroyChartWidget();
+  $$('.screen').forEach((s) => s.classList.remove('active'));
+  $$('.nav-item').forEach((n) => n.classList.remove('active'));
+  const sc = $('screen-chart');
+  sc.classList.add('active');
+  sc.setAttribute('aria-hidden', 'false');
+  $('app')?.classList.add('app--chart');
+
+  $('chart-page-name').textContent = displayName || chartSymbol;
+  $('chart-page-symbol').textContent = chartSymbol;
+  $('chart-page-error').hidden = true;
+  $('chart-page-loading').style.display = '';
+  $('chart-page-container').innerHTML = '';
+
+  state._chartSymbol = chartSymbol;
+  state._chartName = displayName;
+  state.currentScreen = 'chart';
+  state.chartTimeframe = '1D';
+  document.querySelectorAll('.chart-tf-btn').forEach((b) => {
+    const on = b.dataset.tf === '1D';
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+
+  void refreshChartData();
+}
+
+function chartGoBack() {
+  if (state._chartHistoryPushed) {
+    history.back();
+    return;
+  }
+  history.replaceState(null, '', '/');
+  hideChartScreen();
+  switchScreen(state._preChartScreen || 'markets');
+}
+
+function loadEchartsScript() {
+  if (window.echarts) return Promise.resolve();
+  return new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
+    script.src = 'https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js';
     script.async = true;
-    script.onload = callback;
-    document.body.appendChild(script);
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('No se pudo cargar ECharts'));
+    document.head.appendChild(script);
+  });
+}
+
+async function refreshChartData() {
+  const sym = state._chartSymbol;
+  if (!sym || !API.candles) return;
+  const tf = state.chartTimeframe || '1D';
+  const cfg = CHART_TF[tf];
+  if (!cfg) return;
+
+  const to = Math.floor(Date.now() / 1000);
+  const from = to - cfg.rangeSec;
+  const loading = $('chart-page-loading');
+  const errEl = $('chart-page-error');
+  const container = $('chart-page-container');
+
+  errEl.hidden = true;
+  loading.style.display = '';
+  container.innerHTML = '';
+  destroyChartWidget();
+
+  try {
+    const url = `${API.candles}?symbol=${encodeURIComponent(sym)}&resolution=${encodeURIComponent(cfg.resolution)}&from=${from}&to=${to}`;
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const denied =
+        data.httpStatus === 403 ||
+        data.httpStatus === 401 ||
+        /don't have access|no access to this resource/i.test(String(data.detail || ''));
+      if (isCryptoChartSymbol(sym) && denied) {
+        throw new Error(CRYPTO_CANDLES_PLAN_MSG);
+      }
+      const parts = [data.error, data.detail, data.hint].filter(Boolean);
+      throw new Error(parts.length ? parts.join(' · ') : `Error ${res.status}`);
+    }
+    loading.style.display = 'none';
+    if (!data.ok || data.status !== 'ok' || !data.candles?.length) {
+      errEl.textContent =
+        data.status === 'no_data'
+          ? 'No hay velas para este activo en este periodo (Finnhub).'
+          : 'No se pudieron obtener las velas.';
+      errEl.hidden = false;
+      return;
+    }
+    await renderFinnhubChart(data.candles);
+  } catch (e) {
+    loading.style.display = 'none';
+    errEl.textContent = e.message || 'Error de red';
+    errEl.hidden = false;
   }
 }
 
-function renderTradingViewChart(containerId, tvSymbol) {
-  try {
-    new TradingView.widget({
-      "container_id": containerId,
-      "autosize": true,
-      "symbol": tvSymbol,
-      "interval": "D",
-      "timezone": "Europe/Madrid",
-      "theme": "dark",
-      "style": "1",
-      "locale": "es",
-      "toolbar_bg": "#1a1a1a",
-      "enable_publishing": false,
-      "allow_symbol_change": true,
-      "hide_side_toolbar": false,
-      "details": true,
-      "hotlist": true,
-      "calendar": true,
-      "studies": ["Volume@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+async function renderFinnhubChart(candles) {
+  await loadEchartsScript();
+  const container = $('chart-page-container');
+  container.innerHTML = '';
+  const h = Math.max(280, Math.min(480, Math.floor(window.innerHeight * 0.48)));
+  const el = document.createElement('div');
+  el.className = 'chart-echarts-root';
+  el.style.width = '100%';
+  el.style.height = `${h}px`;
+  container.appendChild(el);
+
+  const dates = candles.map((c) => {
+    const d = new Date(c.time * 1000);
+    return d.toLocaleString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
     });
-  } catch (err) {
-    console.error('Error TradingView:', err);
+  });
+  const n = candles.length;
+  const labelEvery = Math.max(1, Math.floor(n / 8));
+
+  const chart = window.echarts.init(el, null, { renderer: 'canvas' });
+  chart.setOption({
+    animation: false,
+    backgroundColor: '#F8F9FA',
+    textStyle: { fontFamily: 'Manrope, system-ui, sans-serif', color: '#414848' },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+    },
+    axisPointer: { link: [{ xAxisIndex: [0, 1] }] },
+    grid: [
+      { left: '10%', right: '8%', top: '14%', height: '50%' },
+      { left: '10%', right: '8%', top: '72%', height: '18%' },
+    ],
+    xAxis: [
+      {
+        type: 'category',
+        data: dates,
+        boundaryGap: true,
+        axisLine: { lineStyle: { color: '#c1c8c7' } },
+        axisLabel: {
+          color: '#717878',
+          interval: (i) => i % labelEvery === 0 || i === n - 1,
+          rotate: 28,
+          fontSize: 10,
+        },
+      },
+      {
+        type: 'category',
+        gridIndex: 1,
+        data: dates,
+        boundaryGap: true,
+        axisLabel: { show: false },
+        axisTick: { show: false },
+        axisLine: { show: false },
+      },
+    ],
+    yAxis: [
+      {
+        scale: true,
+        splitLine: { lineStyle: { color: 'rgba(193, 200, 199, 0.45)' } },
+        axisLabel: { color: '#414848', fontSize: 11 },
+      },
+      {
+        scale: true,
+        gridIndex: 1,
+        splitNumber: 2,
+        axisLabel: { show: false },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+      },
+    ],
+    series: [
+      {
+        type: 'candlestick',
+        data: candles.map((c) => [c.open, c.close, c.low, c.high]),
+        itemStyle: {
+          color: '#2b6769',
+          color0: '#ba1a1a',
+          borderColor: '#2b6769',
+          borderColor0: '#ba1a1a',
+        },
+      },
+      {
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        data: candles.map((c) => ({
+          value: c.volume != null && c.volume > 0 ? c.volume : 0,
+          itemStyle: {
+            color: c.close >= c.open ? 'rgba(43, 103, 105, 0.35)' : 'rgba(186, 26, 26, 0.35)',
+          },
+        })),
+      },
+    ],
+  });
+
+  state._echartsInstance = chart;
+  state._lwResize = () => {
+    chart.resize();
+  };
+  window.addEventListener('resize', state._lwResize);
+}
+
+function bindChartPage() {
+  $('chart-page-back')?.addEventListener('click', chartGoBack);
+  $('chart-timeframes')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chart-tf-btn');
+    if (!btn) return;
+    const tf = btn.dataset.tf;
+    if (!tf || tf === state.chartTimeframe) return;
+    state.chartTimeframe = tf;
+    document.querySelectorAll('.chart-tf-btn').forEach((b) => {
+      const on = b.dataset.tf === tf;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    void refreshChartData();
+  });
+}
+
+function initChartRoute() {
+  const path = location.pathname;
+  if (path.startsWith('/chart/')) {
+    const raw = path.slice('/chart/'.length);
+    let sym = raw;
+    try {
+      sym = decodeURIComponent(raw);
+    } catch (_) { /* raw */ }
+    const name = history.state?.chartName || sym;
+    state._preChartScreen = 'markets';
+    state._chartHistoryPushed = false;
+    applyChartRoute(sym, name);
   }
+
+  window.addEventListener('popstate', () => {
+    const p = location.pathname;
+    if (p.startsWith('/chart/')) {
+      const raw = p.slice('/chart/'.length);
+      let sym = raw;
+      try {
+        sym = decodeURIComponent(raw);
+      } catch (_) { /* raw */ }
+      const name = history.state?.chartName || sym;
+      applyChartRoute(sym, name);
+    } else {
+      hideChartScreen();
+      state._chartHistoryPushed = false;
+      const back = state._preChartScreen || 'markets';
+      $$('.screen').forEach((s) => s.classList.remove('active'));
+      $(`screen-${back}`)?.classList.add('active');
+      $$('.nav-item').forEach((n) => n.classList.remove('active'));
+      document.querySelector(`.nav-item[data-screen="${back}"]`)?.classList.add('active');
+      state.currentScreen = back;
+    }
+  });
 }
 
 const TOPICS = [
@@ -537,7 +847,7 @@ async function renderSaved() {
     state._savedCardCache = Object.fromEntries(ordered.map((c) => [c.id, c]));
     savedList.innerHTML = ordered.length === 0
       ? `<div class="empty-state"><h2>No hay guardados visibles</h2></div>`
-      : ordered.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button type="button" class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
+      : ordered.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div>${cardAiSourceRowHtml(c)}<h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button type="button" class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
   } catch (err) {
     console.error('renderSaved:', err);
     savedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
@@ -666,43 +976,43 @@ function renderProfileModal() {
   if (!user) return;
   const email = user.email || '';
   const isPrem = isPremium();
-  const planBadge = isPrem ? `<span style="background:#2a6b3a;color:#7fd89a;padding:3px 10px;border-radius:20px;font-size:12px;">Premium</span>` : `<span style="background:#2a2a2a;color:#9a958b;padding:3px 10px;border-radius:20px;font-size:12px;">Free</span>`;
+  const planBadge = isPrem ? `<span style="background:rgba(177,237,239,0.65);color:#084f51;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Premium</span>` : `<span style="background:#e7e8e9;color:#414848;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Free</span>`;
   
   modal.innerHTML = `
-    <div style="text-align:center;padding:20px 0;border-bottom:1px solid #3a3530;margin-bottom:20px;">
-      <div style="width:56px;height:56px;border-radius:50%;background:var(--surface-2);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;">${email[0]?.toUpperCase() || '?'}</div>
+    <div style="text-align:center;padding:20px 0;border-bottom:1px solid #e1e3e4;margin-bottom:20px;">
+      <div style="width:56px;height:56px;border-radius:50%;background:#edeeef;border:1px solid #c1c8c7;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:#0f2d2e;">${email[0]?.toUpperCase() || '?'}</div>
       <div style="font-size:15px;font-weight:500;">${email}</div>
       <div style="margin-top:8px;">${planBadge}</div>
       ${!isPrem ? `<p style="font-size:13px;color:var(--ink-dim);margin-top:14px;line-height:1.45;">Plan <strong>Free</strong>: 5 noticias del día y mercados. <strong>Premium</strong>: todas las noticias, histórico y guardar.</p>
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e1e3e4;">
         <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:10px;">Suscripción Premium</div>
         <p style="font-size:12px;color:var(--ink-muted);margin:0 0 12px;line-height:1.4;">Pago seguro con Stripe · cancela cuando quieras</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button type="button" onclick="startStripeCheckout('monthly')" style="flex:1;min-width:120px;padding:12px 14px;background:#c9a961;border:none;border-radius:10px;color:#1a1a1a;font-weight:600;cursor:pointer;font-size:13px;">5 € / mes</button>
-          <button type="button" onclick="startStripeCheckout('yearly')" style="flex:1;min-width:120px;padding:12px 14px;background:transparent;border:1px solid var(--border);color:var(--ink);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">20 € / año</button>
+          <button type="button" onclick="startStripeCheckout('monthly')" style="flex:1;min-width:120px;padding:12px 14px;background:#0f2d2e;border:none;border-radius:10px;color:#fff;font-weight:600;cursor:pointer;font-size:13px;">5 € / mes</button>
+          <button type="button" onclick="startStripeCheckout('yearly')" style="flex:1;min-width:120px;padding:12px 14px;background:transparent;border:1px solid #c1c8c7;color:var(--ink);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">20 € / año</button>
         </div>
       </div>` : `
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
-        <button type="button" onclick="openStripePortal()" style="width:100%;padding:12px;background:transparent;border:1px solid rgba(201,169,97,0.45);color:var(--accent);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">Gestionar suscripción y facturas</button>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e1e3e4;">
+        <button type="button" onclick="openStripePortal()" style="width:100%;padding:12px;background:transparent;border:1px solid rgba(43,103,105,0.35);color:var(--accent);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">Gestionar suscripción y facturas</button>
       </div>`}
     </div>
     <div style="margin-bottom:20px;">
-      <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:12px;">AJUSTES</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.12em;color:var(--ink-muted);margin-bottom:12px;">AJUSTES</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #e1e3e4;">
         <div><div style="font-size:14px;font-weight:500;">Recordatorio diario</div><div style="font-size:12px;color:var(--ink-dim);">Notificación a las 7:30</div></div>
         <input type="checkbox" id="reminder-toggle" ${state.profile?.daily_reminder_enabled ? 'checked' : ''} onchange="toggleDailyReminder()" style="cursor:pointer;width:18px;height:18px;">
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
-        <div><div style="font-size:14px;font-weight:500;">Tema oscuro</div><div style="font-size:12px;color:var(--ink-dim);">Activado siempre</div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #e1e3e4;">
+        <div><div style="font-size:14px;font-weight:500;">Apariencia</div><div style="font-size:12px;color:var(--ink-dim);">Tema claro Serene</div></div>
         <input type="checkbox" checked disabled style="cursor:not-allowed;width:18px;height:18px;opacity:0.5;">
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #e1e3e4;">
         <div><div style="font-size:14px;font-weight:500;">Guardar offline</div><div style="font-size:12px;color:var(--ink-dim);">Lee sin conexión</div></div>
         <input type="checkbox" id="offline-toggle" ${localStorage.getItem('lente.offline-mode') === '1' ? 'checked' : ''} onchange="toggleOfflineMode()" style="cursor:pointer;width:18px;height:18px;">
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
         <div><div style="font-size:14px;font-weight:500;">Instalar app</div><div style="font-size:12px;color:var(--ink-dim);">PWA en tu dispositivo</div></div>
-        <button type="button" onclick="installPWAFromModal()" style="padding:6px 12px;background:#c9a961;border:none;border-radius:6px;color:#1a1a1a;font-size:12px;font-weight:600;cursor:pointer;">${getInstallButtonLabel()}</button>
+        <button type="button" onclick="installPWAFromModal()" style="padding:8px 14px;background:#0f2d2e;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">${getInstallButtonLabel()}</button>
       </div>
     </div>
     <button class="cta" id="logout-btn" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);">Cerrar sesión</button>
@@ -971,8 +1281,8 @@ let loginMode = 'login';
 function showTab(mode) {
   loginMode = mode;
   const isLogin = mode === 'login';
-  if ($('tab-login')) { $('tab-login').style.background = isLogin ? '' : 'transparent'; $('tab-login').style.color = isLogin ? '' : '#9a958b'; }
-  if ($('tab-register')) { $('tab-register').style.background = isLogin ? 'transparent' : ''; $('tab-register').style.color = isLogin ? '#9a958b' : ''; }
+  if ($('tab-login')) { $('tab-login').style.background = isLogin ? '' : 'transparent'; $('tab-login').style.color = isLogin ? '' : '#717878'; }
+  if ($('tab-register')) { $('tab-register').style.background = isLogin ? 'transparent' : ''; $('tab-register').style.color = isLogin ? '#717878' : ''; }
   if ($('login-submit-btn')) $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
   if ($('login-status')) $('login-status').textContent = '';
 }
@@ -1093,6 +1403,8 @@ async function startApp() {
 
 async function init() {
   console.log('🚀 Inicializando app v26...');
+  bindChartPage();
+  initChartRoute();
   await initAuth();
   updateProfileBtn();
   await startApp();
