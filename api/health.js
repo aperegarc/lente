@@ -14,14 +14,13 @@ export default async function handler(req, res) {
     errors: [],
   };
 
-  // Variables requeridas (sin OPENAI_API_KEY — ya no se usa)
+  // Variables requeridas (la generación de tarjetas ya no usa OpenAI)
   const required = {
-    SUPABASE_URL:         'https://...supabase.co',
-    SUPABASE_ANON_KEY:    'eyJ...',
+    SUPABASE_URL: 'https://...supabase.co',
+    SUPABASE_ANON_KEY: 'eyJ...',
     SUPABASE_SERVICE_KEY: 'eyJ...',
-    ANTHROPIC_API_KEY:    'sk-ant-api03-...',
-    VOYAGE_API_KEY:       'pa-...',
-    CRON_SECRET:          'cadena aleatoria 32+ chars',
+    ANTHROPIC_API_KEY: 'sk-ant-api03-...',
+    CRON_SECRET: 'cadena aleatoria 32+ chars',
   };
 
   for (const [name, expected] of Object.entries(required)) {
@@ -37,6 +36,27 @@ export default async function handler(req, res) {
     } else {
       checks.vars[name] = `✓ ${val.slice(0, 8)}...${val.slice(-4)} (${val.length} chars)`;
     }
+  }
+
+  const openai = process.env.OPENAI_API_KEY;
+  if (openai && !openai.includes('...') && openai.length >= 10) {
+    checks.vars.OPENAI_API_KEY = `○ opcional legada (${openai.slice(0, 8)}...)`;
+  } else {
+    checks.vars.OPENAI_API_KEY = '○ no usada por generate.js (solo Claude)';
+  }
+
+  const fh = process.env.FINNHUB_API_KEY;
+  if (fh && !fh.includes('...') && fh.length >= 8) {
+    checks.vars.FINNHUB_API_KEY = `○ ingest (${fh.slice(0, 6)}...)`;
+  } else {
+    checks.vars.FINNHUB_API_KEY = '○ sin configurar (solo RSS)';
+  }
+
+  const sk = process.env.STRIPE_SECRET_KEY;
+  if (sk && !sk.includes('...') && sk.length > 20) {
+    checks.vars.STRIPE = `○ pagos (${sk.slice(0, 7)}...)`;
+  } else {
+    checks.vars.STRIPE = '○ suscripciones desactivadas (faltan claves Stripe)';
   }
 
   // Ping a Supabase + verificar tablas

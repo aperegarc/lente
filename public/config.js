@@ -12,7 +12,8 @@ window.LENTE_CONFIG = {
 
   // Endpoints de la API (relative → mismo dominio que la PWA)
   API: {
-    feed:    '/api/feed',
-    markets: '/api/markets',
+    feed:         '/api/feed',
+    feedHistory:  '/api/feed-history',
+    markets:      '/api/markets',
   },
 };

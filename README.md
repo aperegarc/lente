@@ -4,7 +4,7 @@ Una app web instalable (PWA) que publica 5-7 noticias económicas diarias, expli
 
 **Precio objetivo:** 12€/año  
 **Público:** Inversores pasivos españoles que quieren entender mercados sin jerga  
-**Tecnología:** PWA vanilla + Vercel serverless + Supabase + Claude API + OpenAI embeddings
+**Tecnología:** PWA vanilla + Vercel serverless + Supabase + Claude API (generación por lotes sin embeddings)
 
 ---
 
@@ -19,7 +19,6 @@ Una app web instalable (PWA) que publica 5-7 noticias económicas diarias, expli
   - Supabase — https://supabase.com (proyecto creado)
   - Vercel — https://vercel.com (conectada a GitHub)
   - Anthropic — https://console.anthropic.com (con saldo)
-  - OpenAI — https://platform.openai.com (con saldo)
 
 ### Estructura de carpetas
 
@@ -32,7 +31,7 @@ lente/
 │   ├── markets.js            # Mercados en vivo
 │   ├── cron/
 │   │   ├── ingest.js         # Ingestión RSS (2x día)
-│   │   ├── generate.js       # Clustering + Claude
+│   │   ├── generate.js       # Claude: lista RSS → tarjetas (JSON)
 │   │   └── markets.js        # Yahoo Finance
 │   └── admin/
 │       ├── cards.js          # CRUD admin
@@ -65,8 +64,7 @@ lente/
 **Si compartiste keys, rótalas:**
 
 1. **Anthropic:** https://console.anthropic.com/settings/keys → Delete → Create new
-2. **OpenAI:** https://platform.openai.com/api-keys → Create new
-3. **CRON_SECRET:** En PowerShell: `-join ((65..90)+(97..122)+(48..57) | Get-Random -Count 48 | % {[char]$_})`
+2. **CRON_SECRET:** En PowerShell: `-join ((65..90)+(97..122)+(48..57) | Get-Random -Count 48 | % {[char]$_})`
 
 ### Paso 2 — Clonar proyecto
 
@@ -89,7 +87,6 @@ SUPABASE_URL=https://TU-PROYECTO.supabase.co
 SUPABASE_ANON_KEY=eyJhbGci...
 SUPABASE_SERVICE_KEY=eyJhbGci...
 ANTHROPIC_API_KEY=sk-ant-api03-...
-OPENAI_API_KEY=sk-proj-...
 CRON_SECRET=[cadena-aleatoria-48-chars]
 ```
 
@@ -148,7 +145,7 @@ git push
 
 ### Paso 3 — Variables de entorno
 
-Settings → Environment Variables → Añade 6:
+Settings → Environment Variables → Añade 5:
 
 | Name | Value |
 |---|---|
@@ -156,7 +153,6 @@ Settings → Environment Variables → Añade 6:
 | SUPABASE_ANON_KEY | eyJhbGci... |
 | SUPABASE_SERVICE_KEY | eyJhbGci... |
 | ANTHROPIC_API_KEY | sk-ant-api03-... |
-| OPENAI_API_KEY | sk-proj-... |
 | CRON_SECRET | cadena-aleatoria-48-chars |
 
 ### Paso 4 — Verificar en producción
@@ -228,9 +224,9 @@ Lee los `errors` del JSON. Te dice exactamente qué falta.
 1. Abre http://localhost:3000/api/health → verifica ✓
 2. Mira logs en terminal
 3. Busca errores:
-   - "Embeddings error" → OpenAI sin saldo
-   - "401" → API key inválida
-   - "No articles" → ejecuta ingest primero
+   - "401" / Anthropic → API key inválida o sin saldo
+   - "Sin artículos recientes" → ejecuta ingest primero
+   - JSON inválido → revisa logs de Claude; reintenta generar
 
 ---
 
@@ -239,13 +235,11 @@ Lee los `errors` del JSON. Te dice exactamente qué falta.
 ### Pipeline automático (2x/día)
 
 ```
-1. RSS Ingest → 200+ artículos
-2. OpenAI Embeddings → vectores
-3. Clustering → agrupa similares
-4. Ranking → puntúa
-5. Claude API → genera tarjeta
-6. Revisión humana → aprueba/rechaza
-7. Publicación → aparece en feed
+1. RSS Ingest → artículos en BD
+2. Dedupe de titulares + ventana 72h
+3. Un prompt Claude → varias tarjetas (JSON + ids de artículo)
+4. Revisión humana → aprueba/rechaza
+5. Publicación → aparece en feed
 ```
 
 ### Base de datos (Supabase)
@@ -267,8 +261,7 @@ Todas con Row Level Security (RLS).
 |---|---|
 | Vercel (Hobby) | 0€ |
 | Supabase (Free) | 0€ |
-| Claude API | ~7€ |
-| OpenAI (embeddings) | ~1€ |
+| Claude API | ~8€ |
 | Dominio | ~1,25€ (anualizado) |
 | **Total** | **~9€/mes** |
 

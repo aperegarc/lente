@@ -302,6 +302,23 @@ html, body {
 .meaning-box .section-label::after { display: none; }
 .meaning-text { font-size: 13px; line-height: 1.55; color: var(--ink); }
 
+.card-upsell {
+  background: linear-gradient(135deg, rgba(201, 169, 97, 0.14), rgba(201, 169, 97, 0.04));
+  border: 1px solid rgba(201, 169, 97, 0.28);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.card-upsell .upsell-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.action-btn-save-lock {
+  opacity: 0.55;
+}
+
 .card-footer {
   margin-top: auto;
   padding-top: 18px;
@@ -955,6 +972,96 @@ html, body {
 
 .btn-install:hover {
   opacity: 0.9;
+}
+
+/* Guía instalación iOS / macOS Safari (sin API de un clic) */
+.install-guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+.install-guide-panel {
+  background: var(--surface-1, #1a1a1a);
+  border: 1px solid var(--border, #2e2e2e);
+  border-radius: 16px;
+  padding: 22px 22px 18px;
+  max-width: 380px;
+  width: 100%;
+  max-height: min(88vh, 560px);
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.install-guide-panel h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink, #f5f0e8);
+}
+.install-guide-panel .lead {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-dim, #9a958b);
+}
+.install-guide-steps {
+  background: var(--bg-card, #141414);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink, #f5f0e8);
+}
+.install-guide-steps strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent, #c9a961);
+  font-weight: 600;
+}
+.install-guide-steps .step-num {
+  opacity: 0.85;
+  margin-right: 4px;
+}
+.install-guide-note {
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin: 0 0 14px;
+  line-height: 1.4;
+}
+.install-guide-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.install-guide-actions button {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+.install-guide-actions .btn-primary {
+  background: var(--accent, #c9a961);
+  color: #1a1a1a;
+}
+.install-guide-actions .btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink-dim);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .install-prompt .icon-btn {

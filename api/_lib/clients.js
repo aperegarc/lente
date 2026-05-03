@@ -37,14 +37,46 @@ export function isValidCronRequest(req) {
   return (req.headers.authorization || '') === `Bearer ${secret}`;
 }
 
-export function getDeploymentUrl(req) {
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  if (process.env.DEPLOYMENT_URL) return process.env.DEPLOYMENT_URL.replace(/\/$/, '');
-  if (req?.headers?.host) {
-    const proto = req.headers['x-forwarded-proto'] || 'http';
-    return `${proto}://${req.headers.host}`;
+/** Fuerza http:// para loopback (vercel dev no sirve TLS en tu máquina). */
+function coerceLoopbackToHttp(baseUrl) {
+  try {
+    const u = new URL(baseUrl);
+    const hn = u.hostname.replace(/^\[|\]$/g, '');
+    if (hn === 'localhost' || hn === '127.0.0.1' || hn === '::1') {
+      u.protocol = 'http:';
+      return u.origin;
+    }
+  } catch (_) {
+    /* ignore */
   }
-  return 'http://localhost:3000';
+  return baseUrl.replace(/\/$/, '');
+}
+
+/** Origen HTTP(S) para llamadas server→server (triggers → cron). */
+export function getDeploymentUrl(req) {
+  let base;
+
+  if (process.env.VERCEL_URL) {
+    const hostPart = process.env.VERCEL_URL.replace(/^https?:\/\//, '').split('/')[0];
+    base = `https://${hostPart}`;
+  } else if (process.env.DEPLOYMENT_URL) {
+    base = process.env.DEPLOYMENT_URL.replace(/\/$/, '');
+  } else if (req?.headers?.host) {
+    const host = String(req.headers.host).trim();
+    const forwarded = req.headers['x-forwarded-proto'];
+    const proto = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const isSecureHeader = proto === 'https' || proto === 'http';
+    const useHttp =
+      /^localhost(?::\d+)?$/i.test(host) ||
+      /^127\.0\.0\.1(?::\d+)?$/.test(host) ||
+      /^\[::1\](?::\d+)?$/i.test(host);
+    const scheme = useHttp ? 'http' : (isSecureHeader ? proto : 'https');
+    base = `${scheme}://${host}`;
+  } else {
+    base = 'http://localhost:3000';
+  }
+
+  return coerceLoopbackToHttp(base);
 }
 
 // ============================================================

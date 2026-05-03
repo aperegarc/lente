@@ -73,12 +73,30 @@ let appReady = false;
 let deferredPrompt = null;
 
 const ua = navigator.userAgent.toLowerCase();
-const isIOS = /iphone|ipad|ipod/.test(ua);
+const uaRaw = navigator.userAgent;
+/** iPad con iPadOS puede declararse como Mac + táctil */
+const isIPadOSDevice =
+  /ipad/.test(ua) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isIOSDevice = /iphone|ipod/.test(ua) || isIPadOSDevice;
+const isMacDesktop =
+  /macintosh|mac os x/i.test(uaRaw) && !isIOSDevice && !/android/i.test(uaRaw);
+
+/** Safari de escritorio en Mac (no Chrome/Edge/Firefox) */
+function isDesktopSafari() {
+  return (
+    /^((?!chrome|crios|fxios|edg|opr\/).)*safari/i.test(uaRaw) && isMacDesktop
+  );
+}
+
 const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
 const isAndroid = /android/.test(ua);
 const isChrome = /chrome|chromium|crios/.test(ua);
 const isEdge = /edg/.test(ua);
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const isStandalone =
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+  window.navigator.standalone === true;
 
 function initSupabase() {
   if (window.supabase && !supabaseClient) {
@@ -119,6 +137,13 @@ const state = {
   session: null,
   profile: null,
   feed: { date: null, cards: [] },
+  feedMeta: {
+    plan_tier: 'free',
+    free_limit: 5,
+    total_in_edition: 0,
+    locked_count: 0,
+    edition_complete: true,
+  },
   markets: { grouped: {}, flat: [], updated_at: null },
   savedIds: new Set(),
   currentScreen: 'today',
@@ -173,7 +198,7 @@ function switchScreen(name) {
   document.querySelector(`.nav-item[data-screen="${name}"]`)?.classList.add('active');
   if (name === 'markets' && state.markets.flat.length === 0) loadMarkets();
   if (name === 'topics' && !state._topicsRendered) renderTopics();
-  if (name === 'saved') renderSaved();
+  if (name === 'saved') void renderSaved();
 }
 
 $$('.nav-item').forEach(n => {
@@ -187,10 +212,25 @@ async function loadFeed() {
   try {
     await waitForSupabase();
     const url = API.feed + '?_t=' + Date.now();
-    const res = await fetch(url);
+    const headers = {};
+    const token = state.session?.access_token;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(url, { headers });
+    if (res.status === 403) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.message || 'Contenido solo Premium');
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    state.feed = data;
+    state.feed = { date: data.date, cards: data.cards || [] };
+    state.feedMeta = {
+      plan_tier: data.plan_tier || 'free',
+      free_limit: data.free_limit ?? 5,
+      total_in_edition: data.total_in_edition ?? 0,
+      locked_count: data.locked_count ?? 0,
+      edition_complete: data.edition_complete !== false,
+      is_latest_edition: data.is_latest_edition !== false,
+    };
     renderFeed();
   } catch (err) {
     console.error('❌ Error loadFeed:', err.message);
@@ -218,11 +258,17 @@ function renderFeed(filterCategory = null) {
     return;
   }
   const totalReadTime = Math.round(cards.reduce((a, c) => a + (c.read_time_seconds || 40), 0) / 60);
-  let html = `<section class="card card-intro"><div class="intro-label">${filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día'}</div><h1 class="intro-title">${filterCategory ? `<em>${filterCategory}</em>` : 'Buenos días.'}</h1><p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p><div class="intro-stats"><div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div><div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura</div></div></div></section>`;
+  const locked = !filterCategory && !isPremium() && (state.feedMeta?.locked_count > 0);
+  const upsell = locked
+    ? `<section class="card card-upsell"><p class="upsell-text"><strong>${state.feedMeta.locked_count} noticia${state.feedMeta.locked_count === 1 ? '' : 's'} más</strong> en esta edición con <strong>Premium</strong> — 5 €/mes o 20 €/año (histórico + guardar).</p></section>`
+    : '';
+  let html = `<section class="card card-intro"><div class="intro-label">${filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día'}</div><h1 class="intro-title">${filterCategory ? `<em>${filterCategory}</em>` : 'Buenos días.'}</h1><p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p><div class="intro-stats"><div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div><div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura</div></div></div></section>${upsell}`;
   for (const c of cards) {
     const catClass = CATEGORY_COLORS[c.category] || '';
     const saved = state.savedIds.has(c.id);
-    html += `<section class="card" data-id="${c.id}"><div class="card-meta"><span class="category ${catClass}">${c.category}</span><span class="read-time">· ${c.read_time_seconds || 40} s</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${c.id}">${c.body}</p><button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${c.meaning}</p></div><div class="card-footer"><div class="actions"><button class="action-btn ${saved ? 'saved' : ''}" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button class="action-btn" onclick="shareCard('${c.id}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`;
+    const saveLocked = !isPremium();
+    const saveClass = `${saved ? 'saved' : ''} ${saveLocked ? 'action-btn-save-lock' : ''}`;
+    html += `<section class="card" data-id="${c.id}"><div class="card-meta"><span class="category ${catClass}">${c.category}</span><span class="read-time">· ${c.read_time_seconds || 40} s</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${c.id}">${c.body}</p><button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${c.meaning}</p></div><div class="card-footer"><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${c.id}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`;
   }
   feedList.innerHTML = html;
 }
@@ -410,7 +456,7 @@ async function loadSavedCards() {
   try {
     await waitForSupabase();
     if (!state.session) {
-      state.savedIds = new Set(JSON.parse(localStorage.getItem('lente.saved') || '[]'));
+      state.savedIds = new Set();
       return;
     }
     const user = state.session?.user;
@@ -423,48 +469,84 @@ async function loadSavedCards() {
 }
 
 async function toggleSave(cardId, btn) {
+  await waitForSupabase();
+  if (!state.session) {
+    toast('Inicia sesión para guardar noticias');
+    openLoginModal();
+    return;
+  }
+  const hadSaved = state.savedIds.has(cardId);
+  if (!hadSaved && !isPremium()) {
+    toast('Guardar e histórico completos son Premium — 5 €/mes o 20 €/año');
+    return;
+  }
+  const user = state.session.user;
   try {
-    await waitForSupabase();
-    const saved = state.savedIds.has(cardId);
-    if (saved) {
+    if (hadSaved) {
       state.savedIds.delete(cardId);
       btn?.classList.remove('saved');
+      const { error } = await supabaseClient.from('saved_cards').delete().eq('user_id', user.id).eq('card_id', cardId);
+      if (error) throw error;
+      toast('Eliminado');
     } else {
       state.savedIds.add(cardId);
       btn?.classList.add('saved');
+      const { error } = await supabaseClient.from('saved_cards').upsert(
+        { user_id: user.id, card_id: cardId, saved_at: new Date().toISOString() },
+        { onConflict: 'user_id,card_id' },
+      );
+      if (error) throw error;
+      toast('Guardado ✓');
     }
-    if (state.session) {
-      const user = state.session?.user;
-      if (!user) return;
-      if (saved) {
-        await supabaseClient.from('saved_cards').delete().eq('user_id', user.id).eq('card_id', cardId);
-      } else {
-        await supabaseClient.from('saved_cards').upsert({ user_id: user.id, card_id: cardId, saved_at: new Date().toISOString() }, { onConflict: 'user_id,card_id' });
-      }
-    } else {
-      localStorage.setItem('lente.saved', JSON.stringify([...state.savedIds]));
-    }
-    toast(saved ? 'Eliminado' : 'Guardado ✓');
   } catch (err) {
     console.error('Error toggleSave:', err);
-    toast('Error');
+    if (hadSaved) {
+      state.savedIds.add(cardId);
+      btn?.classList.add('saved');
+    } else {
+      state.savedIds.delete(cardId);
+      btn?.classList.remove('saved');
+    }
+    toast(err.message?.includes('row-level security') || err.code === '42501' ? 'Requiere Premium' : 'No se pudo guardar');
   }
 }
 
-function renderSaved() {
+async function renderSaved() {
   const savedList = $('saved-list');
   if (!savedList) return;
-  const saved = state.feed.cards.filter(c => state.savedIds.has(c.id));
   if (!isLoggedIn()) {
-    savedList.innerHTML = `<div class="empty-state"><h2>Inicia sesión</h2><button class="cta" onclick="openLoginModal()">Crear cuenta</button></div>`;
-    if (state.savedIds.size > 0) savedList.innerHTML = saved.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p></section>`).join('');
+    savedList.innerHTML = `<div class="empty-state"><h2>Inicia sesión</h2><button class="cta" onclick="openLoginModal()">Entrar</button></div>`;
     return;
   }
-  savedList.innerHTML = saved.length === 0 ? `<div class="empty-state"><h2>Aún no guardaste nada</h2></div>` : saved.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
+  if (!isPremium()) {
+    savedList.innerHTML = `<div class="empty-state"><h2>Guardados · Premium</h2><p style="max-width:320px;margin:12px auto 0;line-height:1.5;color:var(--ink-dim);">Las cuentas gratuitas leen hasta 5 noticias del día. <strong>Guardar</strong> noticias y el <strong>histórico</strong> de ediciones incluyen Premium (5 €/mes o 20 €/año).</p></div>`;
+    return;
+  }
+  savedList.innerHTML = `<div class="loading">Cargando...</div>`;
+  try {
+    await waitForSupabase();
+    const ids = [...state.savedIds];
+    if (ids.length === 0) {
+      savedList.innerHTML = `<div class="empty-state"><h2>Aún no guardaste nada</h2></div>`;
+      return;
+    }
+    const { data: rows, error } = await supabaseClient.from('cards').select('*').in('id', ids).eq('status', 'published');
+    if (error) throw error;
+    const byId = new Map((rows || []).map((c) => [c.id, c]));
+    const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
+    state._savedCardCache = Object.fromEntries(ordered.map((c) => [c.id, c]));
+    savedList.innerHTML = ordered.length === 0
+      ? `<div class="empty-state"><h2>No hay guardados visibles</h2></div>`
+      : ordered.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button type="button" class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
+  } catch (err) {
+    console.error('renderSaved:', err);
+    savedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
+  }
 }
 
 async function shareCard(id) {
-  const card = state.feed.cards.find(c => c.id === id);
+  let card = state.feed.cards.find(c => c.id === id);
+  if (!card && state._savedCardCache) card = state._savedCardCache[id];
   if (!card) return;
   const text = `${card.headline}\n\n${card.deck}\n\nLeído en lente`;
   const url = `${location.origin}/?card=${id}`;
@@ -496,6 +578,83 @@ function openProfile() {
   }
 }
 
+async function startStripeCheckout(billing) {
+  try {
+    await waitForSupabase();
+    const {
+      data: { session },
+    } = await supabaseClient.auth.getSession();
+    if (!session) {
+      toast('Inicia sesión para suscribirte');
+      openLoginModal();
+      return;
+    }
+    toast('Te llevamos a Stripe para pagar de forma segura…');
+    const res = await fetch('/api/stripe/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ billing }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || 'No se pudo iniciar el pago');
+      return;
+    }
+    if (data.url) window.location.href = data.url;
+  } catch (e) {
+    console.error(e);
+    toast('Error de conexión');
+  }
+}
+
+async function openStripePortal() {
+  try {
+    await waitForSupabase();
+    const {
+      data: { session },
+    } = await supabaseClient.auth.getSession();
+    if (!session) return;
+    toast('Abriendo el portal de facturación…');
+    const res = await fetch('/api/stripe/create-portal-session', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || 'No disponible');
+      return;
+    }
+    if (data.url) window.location.href = data.url;
+  } catch (e) {
+    console.error(e);
+    toast('Error');
+  }
+}
+
+async function handleCheckoutReturn() {
+  const p = new URLSearchParams(window.location.search);
+  const c = p.get('checkout');
+  if (!c) return;
+  if (c === 'success') {
+    toast('Pago recibido. Premium puede tardar unos segundos en activarse.');
+  } else if (c === 'cancel') {
+    toast('Pago cancelado');
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.delete('checkout');
+  const qs = url.searchParams.toString();
+  window.history.replaceState({}, '', url.pathname + (qs ? `?${qs}` : ''));
+  if (state.session?.user?.id) {
+    await loadProfile(state.session.user.id);
+    updateProfileBtn();
+    renderFeed();
+    if ($('profile-modal')?.classList.contains('open')) renderProfileModal();
+  }
+}
+
 function renderProfileModal() {
   const modal = $('profile-modal-body');
   if (!modal) return;
@@ -510,6 +669,18 @@ function renderProfileModal() {
       <div style="width:56px;height:56px;border-radius:50%;background:var(--surface-2);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;">${email[0]?.toUpperCase() || '?'}</div>
       <div style="font-size:15px;font-weight:500;">${email}</div>
       <div style="margin-top:8px;">${planBadge}</div>
+      ${!isPrem ? `<p style="font-size:13px;color:var(--ink-dim);margin-top:14px;line-height:1.45;">Plan <strong>Free</strong>: 5 noticias del día y mercados. <strong>Premium</strong>: todas las noticias, histórico y guardar.</p>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
+        <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:10px;">Suscripción Premium</div>
+        <p style="font-size:12px;color:var(--ink-muted);margin:0 0 12px;line-height:1.4;">Pago seguro con Stripe · cancela cuando quieras</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button type="button" onclick="startStripeCheckout('monthly')" style="flex:1;min-width:120px;padding:12px 14px;background:#c9a961;border:none;border-radius:10px;color:#1a1a1a;font-weight:600;cursor:pointer;font-size:13px;">5 € / mes</button>
+          <button type="button" onclick="startStripeCheckout('yearly')" style="flex:1;min-width:120px;padding:12px 14px;background:transparent;border:1px solid var(--border);color:var(--ink);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">20 € / año</button>
+        </div>
+      </div>` : `
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
+        <button type="button" onclick="openStripePortal()" style="width:100%;padding:12px;background:transparent;border:1px solid rgba(201,169,97,0.45);color:var(--accent);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">Gestionar suscripción y facturas</button>
+      </div>`}
     </div>
     <div style="margin-bottom:20px;">
       <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:12px;">AJUSTES</div>
@@ -527,7 +698,7 @@ function renderProfileModal() {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
         <div><div style="font-size:14px;font-weight:500;">Instalar app</div><div style="font-size:12px;color:var(--ink-dim);">PWA en tu dispositivo</div></div>
-        <button onclick="installPWAFromModal()" style="padding:6px 12px;background:#c9a961;border:none;border-radius:6px;color:#1a1a1a;font-size:12px;font-weight:600;cursor:pointer;">${isStandalone ? '✓ Instalada' : 'Instalar'}</button>
+        <button type="button" onclick="installPWAFromModal()" style="padding:6px 12px;background:#c9a961;border:none;border-radius:6px;color:#1a1a1a;font-size:12px;font-weight:600;cursor:pointer;">${getInstallButtonLabel()}</button>
       </div>
     </div>
     <button class="cta" id="logout-btn" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);">Cerrar sesión</button>
@@ -586,25 +757,207 @@ function toggleOfflineMode() {
   }
 }
 
-async function installPWAFromModal() {
+// ----- PWA: instalar (1 clic con beforeinstallprompt) o guías iOS / macOS -----
+let installGuideEscHandler = null;
+
+function getInstallButtonLabel() {
+  if (isStandalone) return '✓ Instalada';
+  if (deferredPrompt) return 'Instalar ahora';
+  if (isIOSDevice) return 'Ver pasos';
+  if (isMacDesktop && isDesktopSafari()) return 'Añadir al Dock';
+  if (isMacDesktop && (isChrome || isEdge)) return 'Cómo instalar';
+  return 'Instalar';
+}
+
+function syncInstallBannerCopy() {
+  const sub = $('install-prompt-sub');
+  const btn = $('install-prompt-btn');
+  if (!sub || !btn) return;
+  btn.disabled = false;
+  if (isStandalone) {
+    btn.textContent = 'Abriendo como app';
+    btn.disabled = true;
+    sub.textContent = 'Ya usas lente en modo app (o añadida al inicio / Dock).';
+    return;
+  }
+  if (deferredPrompt) {
+    btn.textContent = 'Instalar en 1 clic';
+    sub.textContent = 'El navegador puede añadir lente sin salir de la página.';
+    return;
+  }
+  if (isIOSDevice) {
+    btn.textContent = 'Ver pasos en iPhone / iPad';
+    sub.textContent = 'iOS requiere Compartir → Añadir a inicio (no hay un solo botón del sistema).';
+    return;
+  }
+  if (isMacDesktop && isDesktopSafari()) {
+    btn.textContent = 'Cómo añadir al Dock';
+    sub.textContent = 'En Safari para Mac: menú Archivo o Compartir → Añadir al Dock.';
+    return;
+  }
+  if (isMacDesktop) {
+    btn.textContent = 'Cómo instalar';
+    sub.textContent = 'Chrome/Edge en Mac: icono de instalar en la barra de direcciones o menú del navegador.';
+    return;
+  }
+  btn.textContent = 'Instalar';
+  sub.textContent = 'Acceso directo como app en inicio, Dock o escritorio.';
+}
+
+function dismissInstall() {
+  $('install-prompt')?.classList.remove('show');
+  try {
+    localStorage.setItem('lente.dismiss-install', String(Date.now()));
+  } catch (_) { /* empty */ }
+}
+
+function maybeShowInstallBanner() {
+  if (isStandalone || !deferredPrompt) return;
+  try {
+    const t = localStorage.getItem('lente.dismiss-install');
+    if (t && Date.now() - Number(t) < 4 * 24 * 60 * 60 * 1000) return;
+  } catch (_) { /* empty */ }
+  syncInstallBannerCopy();
+  $('install-prompt')?.classList.add('show');
+}
+
+function closeInstallGuideOverlay() {
+  if (installGuideEscHandler) {
+    document.removeEventListener('keydown', installGuideEscHandler);
+    installGuideEscHandler = null;
+  }
+  $('install-guide-root')?.remove();
+}
+
+function copyPageUrlForInstall() {
+  navigator.clipboard
+    .writeText(location.href)
+    .then(() => toast('Enlace copiado al portapapeles'))
+    .catch(() => toast('No se pudo copiar'));
+}
+
+/**
+ * @param {'ios'|'mac-safari'|'mac-chrome'|'android-chrome'|'generic'} kind
+ * @param {'iphone'|'ipad'|null} sub
+ */
+function openInstallGuide(kind, sub) {
+  closeInstallGuideOverlay();
+  const overlay = document.createElement('div');
+  overlay.className = 'install-guide-overlay';
+  overlay.id = 'install-guide-root';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeInstallGuideOverlay();
+  });
+
+  let lead = '';
+  let stepsHtml = '';
+
+  if (kind === 'ios' && sub === 'iphone') {
+    lead = 'Apple no ofrece API de “un clic”; en iPhone se usa el menú Compartir de Safari.';
+    stepsHtml = `<div class="install-guide-steps"><strong><span class="step-num">1.</span> Compartir</strong>
+      Toca <strong>Compartir</strong> (cuadrado con flecha hacia arriba) en la barra inferior de Safari.</div>
+      <div class="install-guide-steps"><strong><span class="step-num">2.</span> Añadir a inicio</strong>
+      Desplázate y pulsa <strong>Añadir a pantalla de inicio</strong> → Añadir.</div>`;
+  } else if (kind === 'ios' && sub === 'ipad') {
+    lead = 'En iPad el botón Compartir suele estar arriba a la derecha.';
+    stepsHtml = `<div class="install-guide-steps"><strong><span class="step-num">1.</span> Compartir</strong>
+      Pulsa el icono <strong>Compartir</strong> (cuadrado con flecha).</div>
+      <div class="install-guide-steps"><strong><span class="step-num">2.</span> Añadir a inicio</strong>
+      Elige <strong>Añadir a pantalla de inicio</strong> y confirma.</div>`;
+  } else if (kind === 'mac-safari') {
+    lead = 'Safari en macOS usa “Añadir al Dock”, no el mismo cuadro que Windows.';
+    stepsHtml = `<div class="install-guide-steps"><strong><span class="step-num">1.</span> Archivo</strong>
+      Barra de menús: <strong>Archivo</strong> → <strong>Añadir al Dock</strong> (Safari 17+).</div>
+      <div class="install-guide-steps"><strong><span class="step-num">2.</span> Si no aparece</strong>
+      Icono <strong>Compartir</strong> en la barra de Safari → <strong>Añadir al Dock</strong>.</div>`;
+  } else if (kind === 'mac-chrome') {
+    lead = 'Chrome y Edge en Mac suelen permitir instalación nativa en un clic cuando está disponible.';
+    stepsHtml = `<div class="install-guide-steps"><strong><span class="step-num">1.</span> Barra de direcciones</strong>
+      Mira el icono de <strong>instalar</strong> a la derecha de la URL (⊕ o monitor con flecha). Pulsa y confirma.</div>
+      <div class="install-guide-steps"><strong><span class="step-num">2.</span> Menú</strong>
+      Menú <strong>⋮</strong> → <strong>Instalar lente…</strong> o <strong>Crear acceso directo…</strong>.</div>`;
+  } else if (kind === 'android-chrome') {
+    lead = 'Chrome en Android muestra “Instalar app” o la opción en el menú.';
+    stepsHtml = `<div class="install-guide-steps"><strong>Menú ⋮</strong>
+      <strong>Añadir a la pantalla de inicio</strong> o <strong>Instalar aplicación</strong> (según versión).</div>`;
+  } else {
+    lead = 'Busca en el menú del navegador “Instalar”, “Añadir a inicio” o un icono junto a la URL.';
+    stepsHtml = `<div class="install-guide-steps"><strong>Consejo</strong>
+      Si usas Firefox en Mac, suele ser <strong>Guardar en Dock</strong> o crear acceso desde el menú.</div>`;
+  }
+
+  overlay.innerHTML = `
+    <div class="install-guide-panel">
+      <h2>Instalar lente</h2>
+      <p class="lead">${lead}</p>
+      ${stepsHtml}
+      <p class="install-guide-note">En Windows/Android con Chrome o Edge, suele aparecer aviso de instalación automático.</p>
+      <div class="install-guide-actions">
+        <button type="button" class="btn-primary">Entendido</button>
+        <button type="button" class="btn-ghost">Copiar enlace</button>
+      </div>
+    </div>`;
+
+  const [btnOk, btnCopy] = overlay.querySelectorAll('button');
+  btnOk.addEventListener('click', () => closeInstallGuideOverlay());
+  btnCopy.addEventListener('click', () => copyPageUrlForInstall());
+
+  document.body.appendChild(overlay);
+  installGuideEscHandler = (ev) => {
+    if (ev.key === 'Escape') closeInstallGuideOverlay();
+  };
+  document.addEventListener('keydown', installGuideEscHandler);
+}
+
+async function runInstallFlow() {
+  if (isStandalone) {
+    toast('lente ya está en modo app');
+    return false;
+  }
   if (deferredPrompt) {
     try {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        toast('¡App instalada! 🎉');
-        renderProfileModal();
-      }
       deferredPrompt = null;
+      dismissInstall();
+      syncInstallBannerCopy();
+      if (outcome === 'accepted') toast('¡Listo! Acceso directo creado.');
+      return outcome === 'accepted';
     } catch (err) {
-      console.error('Error instalación:', err);
-      toast('Error al instalar');
+      console.error(err);
+      toast('No se pudo abrir el instalador del navegador');
+      return false;
     }
-  } else if (isIOS || (isSafari && !isAndroid)) {
-    showIOSInstallGuide();
-  } else {
-    alert('Tu navegador no soporta instalación de PWA. Intenta abrir el menú y busca "Instalar app".');
   }
+  if (isIOSDevice) {
+    openInstallGuide('ios', isIPadOSDevice ? 'ipad' : 'iphone');
+    return false;
+  }
+  if (isMacDesktop && isDesktopSafari()) {
+    openInstallGuide('mac-safari', null);
+    return false;
+  }
+  if (isMacDesktop && (isChrome || isEdge)) {
+    openInstallGuide('mac-chrome', null);
+    return false;
+  }
+  if (isAndroid && (isChrome || isEdge)) {
+    openInstallGuide('android-chrome', null);
+    return false;
+  }
+  openInstallGuide('generic', null);
+  return false;
+}
+
+async function installPWAFromModal() {
+  await runInstallFlow();
+  if (state.session && $('profile-modal')?.classList.contains('open')) renderProfileModal();
+}
+
+function installPWA() {
+  void runInstallFlow();
 }
 
 function closeLogin() { $('login-modal')?.classList.remove('open'); }
@@ -692,6 +1045,7 @@ async function setupAuthListener() {
         loadProfileFromLocalStorage();
         await loadProfile(session.user.id);
         await loadSavedCards();
+        await loadFeed();
         updateProfileBtn();
         renderFeed();
       } else if (event === 'SIGNED_OUT') {
@@ -699,6 +1053,7 @@ async function setupAuthListener() {
         state.savedIds.clear();
         localStorage.removeItem('lente.profile');
         updateProfileBtn();
+        await loadFeed();
         renderFeed();
       }
     });
@@ -738,6 +1093,8 @@ async function init() {
   updateProfileBtn();
   await startApp();
   await setupAuthListener();
+  syncInstallBannerCopy();
+  await handleCheckoutReturn();
   appReady = true;
   console.log('✅ App v26 lista');
 }
@@ -748,19 +1105,23 @@ if (document.readyState === 'loading') {
   init();
 }
 
-if ((isChrome || isEdge) && !isIOS) {
+/** Chrome, Edge, Brave, etc. en Windows, macOS y Android — instalación en ~1 clic */
+if (!isStandalone) {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
+    maybeShowInstallBanner();
+    syncInstallBannerCopy();
   });
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
+    dismissInstall();
+    syncInstallBannerCopy();
+    toast('Acceso directo instalado ✓');
   });
 }
 
-function showIOSInstallGuide() {
-  const html = `<div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;"><div style="background: #1a1a1a; border-radius: 16px; padding: 24px; max-width: 320px; text-align: center; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><h2 style="margin: 0 0 16px; font-size: 18px; font-weight: 600;">Instalar lente</h2><p style="margin: 0 0 20px; font-size: 14px; color: #ccc; line-height: 1.4;">Pasos para añadir la app a tu pantalla de inicio:</p><div style="background: #2a2a2a; border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left; font-size: 13px; line-height: 1.6;"><div style="margin-bottom: 12px;"><strong style="display: block; margin-bottom: 4px;">1️⃣ Pulsa el botón compartir</strong><span style="color: #999;">(icono ⬆️ abajo)</span></div><div style="margin-bottom: 12px;"><strong style="display: block; margin-bottom: 4px;">2️⃣ Desplaza hacia abajo</strong><span style="color: #999;">y busca "Añadir a pantalla de inicio"</span></div><div><strong style="display: block; margin-bottom: 4px;">3️⃣ Pulsa "Añadir"</strong><span style="color: #999;">¡Listo! La app aparecerá en tu home</span></div></div><button onclick="this.parentElement.parentElement.remove()" style="width: 100%; padding: 10px; background: #c9a961; border: none; border-radius: 8px; color: #1a1a1a; font-weight: 600; cursor: pointer;">Entendido</button></div></div>`;
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  document.body.appendChild(div.firstElementChild);
-}
+window.installPWA = installPWA;
+window.dismissInstall = dismissInstall;
+window.closeInstallGuideOverlay = closeInstallGuideOverlay;
+window.copyPageUrlForInstall = copyPageUrlForInstall;

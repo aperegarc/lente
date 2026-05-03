@@ -27,6 +27,12 @@
     { "source": "/admin", "destination": "/admin.html" }
   ],
 
+  "functions": {
+    "api/stripe/webhook.js": {
+      "maxDuration": 30
+    }
+  },
+
   "crons": [
     {
       "path": "/api/cron/ingest",
