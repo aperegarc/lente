@@ -80,10 +80,22 @@ export default async function handler(req, res) {
   const priceYearly = process.env.STRIPE_PRICE_YEARLY?.trim();
   let billing = 'monthly';
   if (body?.billing === 'yearly') billing = 'yearly';
+  const envPriceName =
+    billing === 'yearly' ? 'STRIPE_PRICE_YEARLY' : 'STRIPE_PRICE_MONTHLY';
   const priceId = billing === 'yearly' ? priceYearly : priceMonthly;
   if (!priceId) {
     return res.status(500).json({
-      error: 'Falta STRIPE_PRICE_MONTHLY o STRIPE_PRICE_YEARLY en el servidor',
+      error: `Falta ${envPriceName} en el servidor`,
+    });
+  }
+  if (priceId.startsWith('prod_')) {
+    return res.status(500).json({
+      error: `${envPriceName} usa un ID de producto (prod_…). Stripe Checkout necesita el Price ID (price_…). En el dashboard: Product catalog → tu producto → Pricing → copia el ID que empieza por price_.`,
+    });
+  }
+  if (!priceId.startsWith('price_')) {
+    return res.status(500).json({
+      error: `${envPriceName} debe ser un Price ID (empieza por price_). Revisa Stripe → Product catalog.`,
     });
   }
 

@@ -133,6 +133,22 @@ const CATEGORY_COLORS = {
   'Energía': 'green', 'España': '', 'Geopolítica': 'blue', 'Inmobiliario': '', 'Laboral': '',
 };
 
+/** Etiquetas en español para pestañas de mercados (vista catálogo / categorías DB) */
+const MARKET_CATEGORY_LABELS = {
+  indices: 'Índices',
+  divisas: 'Divisas',
+  materias: 'Materias primas',
+  cripto: 'Cripto',
+  acciones: 'Acciones',
+};
+
+const MARKET_CATEGORY_ORDER = ['indices', 'divisas', 'materias', 'cripto', 'acciones'];
+
+function marketCategorySortKey(cat) {
+  const i = MARKET_CATEGORY_ORDER.indexOf(cat);
+  return i === -1 ? 100 + cat.charCodeAt(0) : i;
+}
+
 const state = {
   session: null,
   profile: null,
@@ -145,6 +161,7 @@ const state = {
     edition_complete: true,
   },
   markets: { grouped: {}, flat: [], updated_at: null },
+  marketsDisclaimer: null,
   savedIds: new Set(),
   currentScreen: 'today',
   currentMarketTab: 'all',
@@ -300,9 +317,10 @@ async function loadMarkets() {
   marketsList.innerHTML = `<div class="loading">Cargando...</div>`;
   try {
     await waitForSupabase();
-    const res = await fetch(API.markets + '?_t=' + Date.now());
+    const res = await fetch(`${API.markets}?view=universe&_t=${Date.now()}`);
     if (!res.ok) throw new Error('Error');
     state.markets = await res.json();
+    state.marketsDisclaimer = state.markets.disclaimer || null;
     renderMarkets();
     renderTicker();
   } catch (err) {
@@ -313,39 +331,84 @@ async function loadMarkets() {
 function renderMarkets() {
   const marketsList = $('markets-list');
   const tabs = $('market-tabs');
+  const updatedEl = $('markets-updated');
   if (!marketsList || !tabs) return;
-  
-  const cats = Object.keys(state.markets.grouped);
-  tabs.innerHTML = `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` + cats.map(cat => `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${cat}</div>`).join('');
-  
-  const groups = state.currentMarketTab === 'all' ? state.markets.grouped : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
-  
+
+  if (updatedEl) {
+    updatedEl.textContent = state.markets.updated_at
+      ? 'Actualizado · ' +
+        new Date(state.markets.updated_at).toLocaleString('es-ES', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : 'Referencias en vivo y datos orientativos';
+  }
+
+  const cats = Object.keys(state.markets.grouped || {}).sort(
+    (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
+  );
+  const label = (c) => MARKET_CATEGORY_LABELS[c] || c;
+  tabs.innerHTML =
+    `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` +
+    cats.map(
+      (cat) =>
+        `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${label(cat)}</div>`,
+    ).join('');
+
+  const groups =
+    state.currentMarketTab === 'all'
+      ? state.markets.grouped
+      : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
+
+  const sectionOrder = Object.keys(groups).sort(
+    (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
+  );
+
   let html = '';
-  for (const [cat, items] of Object.entries(groups)) {
-    html += `<div class="market-section"><h3 class="market-section-title">${cat}</h3>`;
+  for (const cat of sectionOrder) {
+    const items = groups[cat];
+    if (!items?.length) continue;
+    html += `<div class="market-section"><h3 class="market-section-title">${label(cat)}</h3>`;
     for (const m of items) {
-      const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
+      const cls =
+        m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
       const prefix = m.symbol?.includes('=F') ? '$' : '';
-      const priceDigits = m.price > 1000 ? 0 : m.symbol?.includes('EUR') ? 4 : 2;
-      const tvSymbol = TRADINGVIEW_MAP[m.symbol] || m.symbol;
-      
+      let priceDigits = 2;
+      if (m.price > 1000) priceDigits = 0;
+      else if (m.symbol?.includes('EUR') || m.category === 'divisas') priceDigits = 4;
+      else if (m.category === 'cripto' && m.price != null && m.price < 1) priceDigits = 4;
+      const tvSymbol = m.tv || TRADINGVIEW_MAP[m.symbol] || m.symbol;
+      const detailMeta = {
+        symbol: m.symbol,
+        name: m.name,
+        tv: tvSymbol,
+        category: m.category,
+        price: m.price,
+        change_pct: m.change_pct,
+      };
+
       html += `
-        <div class="market-item" style="cursor: pointer;" onclick="openMarketChart('${tvSymbol}', '${m.name}')">
+        <div class="market-item" style="cursor: pointer;" role="button" onclick='openMarketDetail(${JSON.stringify(detailMeta)})'>
           <div class="market-item-left">
             <div class="market-item-name">${m.name}</div>
             <div class="market-item-desc">${m.description || ''}</div>
           </div>
           <div class="market-item-right">
-            <div class="market-price">${prefix}${fmtNum(m.price, priceDigits)}</div>
-            <div class="market-change ${cls}">${fmtPct(m.change_pct)}</div>
+            <div class="market-price">${m.price != null && !Number.isNaN(+m.price) ? `${prefix}${fmtNum(m.price, priceDigits)}` : '–'}</div>
+            <div class="market-change ${cls}">${m.change_pct != null && !Number.isNaN(+m.change_pct) ? fmtPct(m.change_pct) : '–'}</div>
           </div>
         </div>
       `;
     }
     html += `</div>`;
   }
-  
-  marketsList.innerHTML = html;
+
+  const disc = state.marketsDisclaimer
+    ? `<p class="markets-disclaimer">${state.marketsDisclaimer}</p>`
+    : '';
+  marketsList.innerHTML = html + disc;
 }
 
 function setMarketTab(tab) {
@@ -353,75 +416,242 @@ function setMarketTab(tab) {
   renderMarkets();
 }
 
-async function openMarketChart(tvSymbol, name) {
+/** Normaliza puntos {t,v} que vienen del JSON (por si acaso vienen como string). */
+function normalizeMarketSeriesPoints(series) {
+  const raw = Array.isArray(series) ? series : [];
+  return raw
+    .map((p) => {
+      const v =
+        typeof p.v === 'number' && !Number.isNaN(p.v)
+          ? p.v
+          : parseFloat(String(p?.v ?? '').replace(',', '.'));
+      return { t: p.t, v };
+    })
+    .filter((p) => p.v != null && !Number.isNaN(p.v));
+}
+
+/** Gráfico de línea en canvas (sin dependencias externas). */
+function drawMarketSeriesCanvas(canvas, series, strokeRgb) {
+  const ptsIn = normalizeMarketSeriesPoints(series);
+  if (!canvas || ptsIn.length === 0) return;
+
+  let dataPts = ptsIn;
+  if (dataPts.length === 1) {
+    dataPts = [ptsIn[0], { ...ptsIn[0] }];
+  }
+
+  const wrap = canvas.parentElement;
+  const w = Math.max(wrap?.clientWidth || 280, 200);
+  const h = Math.max(wrap?.clientHeight || 200, 160);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const vals = dataPts.map((p) => p.v);
+  if (vals.length < 2) return;
+
+  let min = Math.min(...vals);
+  let max = Math.max(...vals);
+  const span = max - min || 1;
+  const pad = span * 0.06;
+  min -= pad;
+  max += pad;
+  const range = max - min || 1;
+
+  const marginL = 8;
+  const marginR = 8;
+  const marginT = 10;
+  const marginB = 14;
+  const innerW = w - marginL - marginR;
+  const innerH = h - marginT - marginB;
+  const n = vals.length;
+
+  const pathPts = vals.map((v, i) => {
+    const x = marginL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+    const y = marginT + innerH - ((v - min) / range) * innerH;
+    return { x, y };
+  });
+
+  const [r, g, b] = strokeRgb;
+  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.14)`;
+  ctx.beginPath();
+  ctx.moveTo(pathPts[0].x, marginT + innerH);
+  pathPts.forEach((p) => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(pathPts[pathPts.length - 1].x, marginT + innerH);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pathPts[0].x, pathPts[0].y);
+  for (let i = 1; i < pathPts.length; i++) ctx.lineTo(pathPts[i].x, pathPts[i].y);
+  ctx.stroke();
+}
+
+function parseAccentRgb() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  if (raw.startsWith('#') && raw.length >= 7) {
+    const x = (n) => parseInt(raw.slice(n, n + 2), 16);
+    return [x(1), x(3), x(5)];
+  }
+  return [201, 169, 97];
+}
+
+function formatMarketDetailPrice(v, meta) {
+  if (v == null || Number.isNaN(+v)) return '–';
+  const n = +v;
+  if (meta.category === 'divisas' || String(meta.symbol || '').includes('EUR')) {
+    return n.toLocaleString('es-ES', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  }
+  if (meta.category === 'cripto') {
+    if (n >= 1000) return n.toLocaleString('es-ES', { maximumFractionDigits: 0 });
+    if (n < 1) return n.toLocaleString('es-ES', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+  }
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * Detalle mercado: número + % y gráfico simple (Frankfurter / CoinGecko / Finnhub).
+ * No requiere cuenta ni Premium.
+ */
+async function openMarketDetail(meta) {
   const backdrop = document.createElement('div');
   backdrop.id = 'chart-modal-backdrop';
   backdrop.className = 'chart-modal-backdrop';
 
-  const chartId = `tv-${tvSymbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
-
+  let selectedDays = 30;
   backdrop.innerHTML = `
-    <div class="chart-modal">
+    <div class="chart-modal chart-modal--simple" role="dialog" aria-modal="true">
       <div class="chart-modal-header">
         <div>
-          <div class="chart-modal-title">${name}</div>
-          <div class="chart-modal-symbol">${tvSymbol}</div>
+          <div class="chart-modal-title">${meta.name}</div>
+          <div class="chart-modal-symbol">${meta.symbol}</div>
         </div>
-        <button class="chart-modal-close" onclick="closeChartModal()">×</button>
+        <button type="button" class="chart-modal-close" onclick="closeChartModal()" aria-label="Cerrar">×</button>
       </div>
-      <div class="chart-modal-body" id="${chartId}"></div>
+      <div class="chart-modal-simple-inner">
+        <div class="chart-simple-stats" id="chart-simple-stats">
+          <div class="chart-simple-change" id="chart-simple-change">…</div>
+          <div class="chart-simple-price" id="chart-simple-price">…</div>
+        </div>
+        <div class="chart-range-tabs" id="chart-range-tabs">
+          <button type="button" data-days="7" class="chart-range-tab">7 d</button>
+          <button type="button" data-days="30" class="chart-range-tab active">30 d</button>
+          <button type="button" data-days="90" class="chart-range-tab">90 d</button>
+          <button type="button" data-days="365" class="chart-range-tab">1 a</button>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="market-chart-canvas" aria-label="Evolución del precio"></canvas>
+        </div>
+        <p class="chart-simple-hint" id="chart-simple-hint"></p>
+      </div>
     </div>`;
 
   document.body.appendChild(backdrop);
 
-  loadTradingViewScript(() => {
-    renderTradingViewChart(chartId, tvSymbol);
+  const canvas = $('market-chart-canvas');
+
+  async function paint(days) {
+    selectedDays = days;
+    const elCh = $('chart-simple-change');
+    const elPr = $('chart-simple-price');
+    const elHint = $('chart-simple-hint');
+    elCh.textContent = '…';
+    elPr.textContent = '…';
+
+    let data;
+    try {
+      const url = `${API.markets}?series=1&symbol=${encodeURIComponent(meta.symbol)}&days=${days}&_t=${Date.now()}`;
+      const res = await fetch(url);
+      data = await res.json();
+      if (!res.ok || data.error) {
+        elHint.textContent =
+          data?.error || `Error del servidor (${res.status}).`;
+        return;
+      }
+    } catch (err) {
+      elHint.textContent = 'Error al cargar datos.';
+      return;
+    }
+
+    const last =
+      data.last_v != null && !Number.isNaN(+data.last_v)
+        ? +data.last_v
+        : meta.price != null
+          ? +meta.price
+          : null;
+    const chg =
+      data.change_pct != null && !Number.isNaN(+data.change_pct)
+        ? +data.change_pct
+        : meta.change_pct != null
+          ? +meta.change_pct
+          : null;
+
+    elPr.textContent = formatMarketDetailPrice(last, meta);
+    if (chg != null && !Number.isNaN(chg)) {
+      const sign = chg > 0 ? '+' : chg < 0 ? '−' : '';
+      const cls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'flat';
+      elCh.innerHTML = `<span class="chart-pct ${cls}">${sign}${Math.abs(chg).toFixed(2)}%</span><span class="chart-pct-label">en el periodo</span>`;
+    } else {
+      elCh.innerHTML = '<span class="chart-pct flat">–</span><span class="chart-pct-label">variación</span>';
+    }
+
+    const serRaw = Array.isArray(data.series) ? data.series : [];
+    const norm = normalizeMarketSeriesPoints(serRaw);
+    elHint.textContent =
+      norm.length > 0
+        ? data.attribution || ''
+        : last != null
+          ? `${data.attribution || 'No hay serie histórica para este activo con las fuentes actuales; se muestra la última cotización de la lista.'}`
+          : data.attribution || 'Sin datos en este periodo.';
+
+    backdrop.querySelectorAll('.chart-range-tab').forEach((btn) => {
+      btn.classList.toggle('active', +btn.dataset.days === days);
+    });
+
+    if (canvas) {
+      if (norm.length > 0) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            drawMarketSeriesCanvas(canvas, serRaw, parseAccentRgb());
+          });
+        });
+      } else {
+        const wrap = canvas.parentElement;
+        const w = Math.max(wrap?.clientWidth || 280, 200);
+        const h = Math.max(wrap?.clientHeight || 200, 160);
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d')?.clearRect(0, 0, w, h);
+      }
+    }
+  }
+
+  backdrop.querySelector('#chart-range-tabs')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chart-range-tab');
+    if (!btn?.dataset.days) return;
+    paint(+btn.dataset.days);
   });
 
+  await paint(selectedDays);
+
   backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) backdrop.remove();
+    if (e.target === backdrop) closeChartModal();
   });
 }
 
 function closeChartModal() {
-  document.getElementById('chart-modal-backdrop')?.remove();
-}
-
-function loadTradingViewScript(callback) {
-  if (window.TradingView) {
-    callback();
-  } else {
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
-    script.async = true;
-    script.onload = callback;
-    document.body.appendChild(script);
-  }
-}
-
-function renderTradingViewChart(containerId, tvSymbol) {
-  try {
-    new TradingView.widget({
-      "container_id": containerId,
-      "autosize": true,
-      "symbol": tvSymbol,
-      "interval": "D",
-      "timezone": "Europe/Madrid",
-      "theme": "dark",
-      "style": "1",
-      "locale": "es",
-      "toolbar_bg": "#1a1a1a",
-      "enable_publishing": false,
-      "allow_symbol_change": true,
-      "hide_side_toolbar": false,
-      "details": true,
-      "hotlist": true,
-      "calendar": true,
-      "studies": ["Volume@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-    });
-  } catch (err) {
-    console.error('Error TradingView:', err);
-  }
+  $('chart-modal-backdrop')?.remove();
 }
 
 const TOPICS = [
@@ -986,8 +1216,28 @@ async function submitLogin() {
     if (!password || password.length < 6) { $('login-status').textContent = 'Mínimo 6 caracteres'; return; }
     $('login-status').textContent = loginMode === 'login' ? 'Entrando...' : 'Creando...';
     if (loginMode === 'register') {
-      const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { emailRedirectTo: location.origin } });
-      if (error) { $('login-status').textContent = error.message; } else if (data?.user) { $('login-status').textContent = '✓ Revisa tu email'; $('login-email').value = ''; $('login-password').value = ''; setTimeout(() => showTab('login'), 1500); }
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: location.origin },
+      });
+      if (error) {
+        $('login-status').textContent = error.message;
+      } else if (data?.session) {
+        // Supabase con "Confirm email" desactivado: sesión inmediata (sin mail)
+        $('login-status').textContent = '✓ Cuenta creada';
+        $('login-email').value = '';
+        $('login-password').value = '';
+        setTimeout(() => {
+          closeLogin();
+          toast('¡Cuenta creada! ✓');
+        }, 400);
+      } else if (data?.user) {
+        $('login-status').textContent = '✓ Revisa tu email para confirmar';
+        $('login-email').value = '';
+        $('login-password').value = '';
+        setTimeout(() => showTab('login'), 1500);
+      }
     } else {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) { $('login-status').textContent = error.message; } else if (data?.session) { $('login-status').textContent = '✓ Sesión iniciada'; setTimeout(() => { closeLogin(); toast('¡Bienvenido! ✓'); }, 500); }
@@ -1125,6 +1375,7 @@ if (!isStandalone) {
   });
 }
 
+window.openMarketDetail = openMarketDetail;
 window.installPWA = installPWA;
 window.dismissInstall = dismissInstall;
 window.closeInstallGuideOverlay = closeInstallGuideOverlay;
