@@ -1,127 +1,206 @@
 <!DOCTYPE html>
-<html lang="es">
+<html class="light" lang="es">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0a0a">
+  <meta name="theme-color" content="#F8F9FA">
   <meta name="description" content="Las noticias económicas del día, explicadas en 5 minutos.">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="lente">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <title>lente · noticias económicas explicadas</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link
-    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
     rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet">
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'on-error-container': '#93000a',
+            surface: '#f8f9fa',
+            background: '#f8f9fa',
+            'on-primary-fixed-variant': '#2f4c4c',
+            'primary-fixed-dim': '#adcccd',
+            'error-container': '#ffdad6',
+            'inverse-on-surface': '#f0f1f2',
+            outline: '#717878',
+            'surface-variant': '#e1e3e4',
+            'on-secondary-fixed': '#002021',
+            'on-primary': '#ffffff',
+            tertiary: '#0c151e',
+            'on-primary-fixed': '#012021',
+            'on-tertiary-fixed-variant': '#3f4752',
+            'primary-fixed': '#c9e8e9',
+            'on-background': '#191c1d',
+            'outline-variant': '#c1c8c7',
+            'on-primary-container': '#779596',
+            'on-secondary-container': '#316d6f',
+            'surface-container-highest': '#e1e3e4',
+            'surface-dim': '#d9dadb',
+            'surface-container-lowest': '#ffffff',
+            'on-error': '#ffffff',
+            'surface-container-high': '#e7e8e9',
+            'primary-container': '#0f2d2e',
+            'secondary-fixed': '#b1edef',
+            'on-tertiary-container': '#88909d',
+            'surface-tint': '#476364',
+            'on-secondary': '#ffffff',
+            'secondary-container': '#b1edef',
+            'on-surface-variant': '#414848',
+            'on-tertiary-fixed': '#141c26',
+            'on-secondary-fixed-variant': '#084f51',
+            'tertiary-fixed-dim': '#bfc7d4',
+            'tertiary-container': '#212933',
+            'on-surface': '#191c1d',
+            'surface-container': '#edeeef',
+            'surface-bright': '#f8f9fa',
+            'inverse-surface': '#2e3132',
+            'secondary-fixed-dim': '#96d1d3',
+            'on-tertiary': '#ffffff',
+            error: '#ba1a1a',
+            primary: '#001819',
+            secondary: '#2b6769',
+          },
+          borderRadius: { DEFAULT: '0.25rem', lg: '0.5rem', xl: '0.75rem', full: '9999px' },
+          spacing: {
+            'stack-sm': '8px',
+            'stack-md': '16px',
+            'base-unit': '4px',
+            gutter: '12px',
+            'container-margin': '16px',
+            'stack-lg': '24px',
+          },
+          fontFamily: {
+            'headline-md': ['Manrope', 'sans-serif'],
+            'ui-label': ['Manrope', 'sans-serif'],
+            caption: ['Manrope', 'sans-serif'],
+            'article-body': ['Newsreader', 'serif'],
+            'display-lg': ['Manrope', 'sans-serif'],
+          },
+          fontSize: {
+            'headline-md': ['24px', { lineHeight: '32px', letterSpacing: '-0.01em', fontWeight: '600' }],
+            'ui-label': ['14px', { lineHeight: '20px', letterSpacing: '0.01em', fontWeight: '500' }],
+            caption: ['12px', { lineHeight: '16px', fontWeight: '400' }],
+            'article-body': ['18px', { lineHeight: '28px', fontWeight: '400' }],
+            'display-lg': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '700' }],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    :root { --accent: #2b6769; }
+    html { overflow-x: hidden; }
+    body { background-color: #F8F9FA; min-height: max(884px, 100dvh); overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .premium-blur {
+      backdrop-filter: blur(8px);
+      background: rgba(255, 255, 255, 0.4);
+    }
+    .premium-card-gradient {
+      background: linear-gradient(135deg, #0F2D2E 0%, #2b6769 100%);
+    }
+  </style>
   <link rel="stylesheet" href="/styles.css">
 </head>
 
-<body>
+<body class="font-ui-label text-on-background antialiased pb-20 overflow-x-hidden">
 
-  <!-- ==================== APP ROOT ==================== -->
-  <div id="app">
+  <div id="app" class="relative mx-auto max-w-2xl min-h-[100dvh]">
 
-    <!-- Header -->
-    <header class="app-header">
-      <div class="header-top">
-        <div class="logo">lente<span class="logo-dot"></span></div>
-        <button class="profile-btn" id="profile-btn" onclick="openProfile()">?</button>
-      </div>
-      <div class="date-row" id="date-row">
-        <span class="pulse"></span>
-        <span id="date-label">Cargando...</span>
-        <span class="separator">·</span>
-        <span id="edition-label">Edición del día</span>
-      </div>
+    <!-- Top bar -->
+    <header
+      class="fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between bg-[#F8F9FA]/95 px-4 backdrop-blur-md max-w-2xl mx-auto">
+      <button type="button" id="header-search-btn"
+        class="flex items-center justify-center hover:opacity-80 active:scale-95 transition-transform opacity-40 cursor-default"
+        aria-label="Buscar (próximamente)">
+        <span class="material-symbols-outlined text-[#0F2D2E] text-[22px]">search</span>
+      </button>
+      <div class="font-['Manrope'] text-2xl font-extrabold tracking-tighter text-[#0F2D2E]">lente</div>
+      <button type="button" id="profile-btn" onclick="openProfile()"
+        class="profile-btn flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-outline-variant bg-surface-container-high text-sm font-semibold text-[#0F2D2E]"
+        aria-label="Perfil">?</button>
     </header>
 
-    <!-- Pantallas -->
-    <main class="screens">
+    <main class="relative">
 
-      <!-- ============ HOY / FEED ============ -->
-      <section class="screen active" id="screen-today">
-        <div class="progress-container" id="progress"></div>
-        <div class="ticker" id="ticker"></div>
-        <div id="feed-list"></div>
+      <!-- HOY -->
+      <section class="screen active pt-14 pb-28 px-container-margin" id="screen-today">
+        <header class="py-2">
+          <p id="feed-date-caption"
+            class="font-ui-label text-caption uppercase tracking-widest text-secondary">Cargando…</p>
+          <h1 id="feed-main-title" class="font-display-lg text-display-lg text-primary mt-1">Para ti hoy</h1>
+          <p id="edition-label" class="font-ui-label text-sm text-on-surface-variant mt-1">Edición del día</p>
+        </header>
+
+        <div class="grid grid-cols-2 gap-gutter pb-3" id="mini-markets" aria-live="polite"></div>
+
+        <div class="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-none" id="topic-chips"></div>
+
+        <div id="feed-list" class="space-y-stack-md"></div>
       </section>
 
-      <!-- ============ MERCADOS ============ -->
-      <section class="screen" id="screen-markets">
-        <div class="page-header">
-          <div class="top-row">
-            <h1 class="page-title">Mercados<em>.</em></h1>
-            <div class="live-badge"><span class="dot"></span>En vivo</div>
+      <!-- MERCADOS -->
+      <section class="screen pt-14 pb-28 px-container-margin" id="screen-markets">
+        <header class="mb-4">
+          <div class="flex items-baseline justify-between gap-2">
+            <h1 class="font-display-lg text-display-lg text-primary-container">Mercados</h1>
+            <span class="inline-flex items-center gap-1 rounded-full bg-secondary-container/40 px-2 py-0.5 font-ui-label text-[10px] font-bold uppercase tracking-wider text-secondary">En vivo</span>
           </div>
-          <div class="date-row">
-            <span id="markets-updated">Cargando...</span>
-          </div>
-        </div>
-        <div class="market-tabs" id="market-tabs"></div>
-        <div id="markets-list"></div>
+          <p id="markets-updated" class="font-ui-label text-caption text-on-surface-variant mt-1">Cargando…</p>
+        </header>
+        <div class="mb-4 flex flex-wrap gap-2" id="market-tabs"></div>
+        <div id="markets-list" class="space-y-6"></div>
       </section>
 
-      <!-- ============ ÁMBITOS ============ -->
-      <section class="screen" id="screen-topics">
-        <div class="page-header">
-          <div class="top-row">
-            <h1 class="page-title">Ámbitos<em>.</em></h1>
-          </div>
-          <div class="date-row">
-            <span>Elige qué sigues</span>
-          </div>
-        </div>
-        <div class="ambitos-grid" id="topics-grid"></div>
+      <!-- GUARDADOS -->
+      <section class="screen pt-14 pb-28 px-container-margin" id="screen-saved">
+        <header class="mb-stack-lg">
+          <h1 class="font-display-lg text-display-lg text-primary-container">Guardados</h1>
+          <p class="font-ui-label text-ui-label text-on-surface-variant mt-1">Tus análisis y noticias clave en un solo lugar.</p>
+        </header>
+        <div id="saved-list" class="space-y-stack-md"></div>
       </section>
 
-      <!-- ============ GUARDADOS ============ -->
-      <section class="screen" id="screen-saved">
-        <div class="page-header">
-          <div class="top-row">
-            <h1 class="page-title">Guardados<em>.</em></h1>
-          </div>
-        </div>
-        <div id="saved-list">
-          <div class="empty-state">
-            <h2>Aún no has guardado nada</h2>
-            <p>Toca el icono de marcador en cualquier tarjeta para guardarla aquí.</p>
-          </div>
-        </div>
+      <!-- PERFIL -->
+      <section class="screen pt-14 pb-28 px-container-margin max-w-md mx-auto" id="screen-profile">
+        <div id="profile-screen-body"></div>
       </section>
 
     </main>
 
     <!-- Bottom nav -->
-    <nav class="bottom-nav">
-      <div class="nav-item active" data-screen="today">
-        <svg viewBox="0 0 24 24">
-          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-        </svg>
-        <span>HOY</span>
+    <nav
+      class="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-slate-100 bg-white shadow-[0_-4px_20px_rgba(15,45,46,0.05)] max-w-2xl mx-auto pb-[env(safe-area-inset-bottom)]">
+      <div class="nav-item nav-item-lente active flex flex-1 cursor-pointer flex-col items-center justify-center pt-2 text-[#0F2D2E]"
+        data-screen="today" role="button" tabindex="0">
+        <span class="material-symbols-outlined text-[22px]">newspaper</span>
+        <span class="font-['Manrope'] text-[10px] font-semibold uppercase tracking-wider">Hoy</span>
       </div>
-      <div class="nav-item" data-screen="markets">
-        <svg viewBox="0 0 24 24">
-          <path d="M3 3v18h18M7 14l3-3 3 3 5-5" />
-        </svg>
-        <span>MERCADOS</span>
+      <div class="nav-item nav-item-lente flex flex-1 cursor-pointer flex-col items-center justify-center pt-[10px] text-slate-400"
+        data-screen="markets" role="button" tabindex="0">
+        <span class="material-symbols-outlined text-[22px]">show_chart</span>
+        <span class="font-['Manrope'] text-[10px] font-semibold uppercase tracking-wider">Mercados</span>
       </div>
-      <div class="nav-item" data-screen="topics">
-        <svg viewBox="0 0 24 24">
-          <rect x="3" y="3" width="7" height="7" />
-          <rect x="14" y="3" width="7" height="7" />
-          <rect x="3" y="14" width="7" height="7" />
-          <rect x="14" y="14" width="7" height="7" />
-        </svg>
-        <span>ÁMBITOS</span>
+      <div class="nav-item nav-item-lente flex flex-1 cursor-pointer flex-col items-center justify-center pt-[10px] text-slate-400"
+        data-screen="saved" role="button" tabindex="0">
+        <span class="material-symbols-outlined text-[22px]">bookmark</span>
+        <span class="font-['Manrope'] text-[10px] font-semibold uppercase tracking-wider">Guardados</span>
       </div>
-      <div class="nav-item" data-screen="saved">
-        <svg viewBox="0 0 24 24">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-        </svg>
-        <span>GUARDADOS</span>
+      <div class="nav-item nav-item-lente flex flex-1 cursor-pointer flex-col items-center justify-center pt-[10px] text-slate-400"
+        data-screen="profile" role="button" tabindex="0">
+        <span class="material-symbols-outlined text-[22px]">account_circle</span>
+        <span class="font-['Manrope'] text-[10px] font-semibold uppercase tracking-wider">Perfil</span>
       </div>
     </nav>
   </div>
@@ -131,49 +210,49 @@
     <div class="modal">
       <div class="modal-head">
         <div class="modal-title" id="login-modal-title">Accede a <em>lente</em></div>
-        <button class="icon-btn" onclick="closeLogin()">✕</button>
+        <button class="icon-btn" type="button" onclick="closeLogin()">✕</button>
       </div>
       <div class="modal-body">
-        <div class="login-tabs" style="display:flex;gap:8px;margin-bottom:20px;">
-          <button id="tab-login" class="cta" style="flex:1;padding:9px;" onclick="showTab('login')">Entrar</button>
-          <button id="tab-register" class="cta"
-            style="flex:1;padding:9px;background:transparent;border:1px solid #3a3530;color:#9a958b;"
+        <div class="login-tabs mb-5 flex gap-2">
+          <button id="tab-login" type="button"
+            class="cta flex-1 rounded-lg px-3 py-2 text-sm font-semibold"
+            onclick="showTab('login')">Entrar</button>
+          <button id="tab-register" type="button"
+            class="cta flex-1 rounded-lg border border-outline-variant bg-transparent px-3 py-2 text-sm font-semibold text-on-surface-variant"
             onclick="showTab('register')">Registrarse</button>
         </div>
         <div class="field">
-          <label class="field-label">Email</label>
-          <input type="email" id="login-email" placeholder="tu@email.com" />
+          <label class="field-label" for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" />
         </div>
         <div class="field">
-          <label class="field-label">Contraseña</label>
-          <input type="password" id="login-password" placeholder="••••••••" />
+          <label class="field-label" for="login-password">Contraseña</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
         </div>
-        <button class="cta" id="login-submit-btn" onclick="submitLogin()" style="width:100%;">Entrar</button>
+        <button class="cta mt-2 w-full py-3" id="login-submit-btn" type="button" onclick="submitLogin()">Entrar</button>
         <p id="login-status" class="login-status"></p>
       </div>
     </div>
   </div>
 
-  <!-- Modal perfil -->
+  <!-- Modal perfil (opcional; pantalla principal es #screen-profile) -->
   <div class="modal-bg" id="profile-modal">
     <div class="modal">
       <div class="modal-head">
         <div class="modal-title">Mi perfil</div>
-        <button class="icon-btn" onclick="closeProfileModal()">✕</button>
+        <button class="icon-btn" type="button" onclick="closeProfileModal()">✕</button>
       </div>
-      <div class="modal-body" id="profile-modal-body">
-      </div>
+      <div class="modal-body" id="profile-modal-body"></div>
     </div>
   </div>
 
-  <!-- Install prompt (PWA) -->
   <div class="install-prompt" id="install-prompt">
     <div>
       <strong>Instala lente</strong>
       <p id="install-prompt-sub">Acceso directo como app (Windows, Android, Chrome…).</p>
     </div>
     <button type="button" onclick="installPWA()" class="btn-install" id="install-prompt-btn">Instalar</button>
-    <button onclick="dismissInstall()" class="icon-btn">✕</button>
+    <button type="button" onclick="dismissInstall()" class="icon-btn">✕</button>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -182,7 +261,6 @@
   <script src="/config.js"></script>
   <script src="/app.js"></script>
   <script>
-    // Registrar service worker para PWA
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(() => { });

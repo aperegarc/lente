@@ -127,12 +127,6 @@ async function waitForSupabase() {
   return supabaseClient;
 }
 
-const CATEGORY_COLORS = {
-  'Política monetaria': '', 'Materias primas': 'green', 'Macro Europa': 'blue',
-  'Macro': 'blue', 'Tech': 'red', 'Bolsa': 'red', 'Cripto': 'purple',
-  'Energía': 'green', 'España': '', 'Geopolítica': 'blue', 'Inmobiliario': '', 'Laboral': '',
-};
-
 /** Etiquetas en español para pestañas de mercados (vista catálogo / categorías DB) */
 const MARKET_CATEGORY_LABELS = {
   indices: 'Índices',
@@ -165,6 +159,8 @@ const state = {
   savedIds: new Set(),
   currentScreen: 'today',
   currentMarketTab: 'all',
+  /** null = todas las categorías en Hoy */
+  activeTopicFilter: null,
 };
 
 function isPremium() {
@@ -182,6 +178,15 @@ function isLoggedIn() {
 
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => document.querySelectorAll(sel);
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function toast(msg, ms = 2200) {
   const t = $('toast');
@@ -214,8 +219,9 @@ function switchScreen(name) {
   $(`screen-${name}`)?.classList.add('active');
   document.querySelector(`.nav-item[data-screen="${name}"]`)?.classList.add('active');
   if (name === 'markets' && state.markets.flat.length === 0) loadMarkets();
-  if (name === 'topics' && !state._topicsRendered) renderTopics();
+  if (name === 'today' && state.markets.flat.length === 0) loadMarkets();
   if (name === 'saved') void renderSaved();
+  if (name === 'profile') renderProfilePage();
 }
 
 $$('.nav-item').forEach(n => {
@@ -249,6 +255,7 @@ async function loadFeed() {
       is_latest_edition: data.is_latest_edition !== false,
     };
     renderFeed();
+    renderTopicChips();
   } catch (err) {
     console.error('❌ Error loadFeed:', err.message);
     if (feedList) feedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
@@ -258,57 +265,193 @@ async function loadFeed() {
 function toggleReadMore(id) {
   const body = $(`body-${id}`);
   const btn = $(`readmore-${id}`);
-  const collapsed = body.classList.toggle('collapsed');
+  if (!body || !btn) return;
+  const collapsed = body.classList.toggle('body-collapsed');
   btn.textContent = collapsed ? 'Leer más ↓' : 'Leer menos ↑';
+}
+
+function categoryPillClass(cat) {
+  const map = {
+    'Política monetaria': 'bg-primary-fixed text-on-primary-fixed-variant',
+    'Materias primas': 'bg-secondary-container/60 text-on-secondary-container',
+    'Macro Europa': 'bg-primary-fixed text-on-primary-fixed-variant',
+    Macro: 'bg-primary-fixed text-on-primary-fixed-variant',
+    Tech: 'bg-tertiary-fixed text-on-tertiary-fixed-variant',
+    Bolsa: 'bg-tertiary-fixed text-on-tertiary-fixed-variant',
+    Cripto: 'bg-secondary-container text-on-secondary-container',
+    Energía: 'bg-secondary-fixed/40 text-secondary',
+    España: 'bg-surface-container-high text-on-surface-variant',
+    Geopolítica: 'bg-primary-fixed text-on-primary-fixed-variant',
+    Inmobiliario: 'bg-secondary-container/50 text-on-secondary-container',
+    Laboral: 'bg-surface-container-high text-on-surface-variant',
+  };
+  return map[cat] || 'bg-secondary-container/40 text-on-secondary-container';
 }
 
 function renderFeed(filterCategory = null) {
   const feedList = $('feed-list');
   if (!feedList) return;
-  const cards = filterCategory ? state.feed.cards.filter(c => c.category === filterCategory) : state.feed.cards;
-  const dateLabel = $('date-label');
+  const topic = filterCategory ?? state.activeTopicFilter;
+  const cards = topic ? state.feed.cards.filter((c) => c.category === topic) : state.feed.cards;
+
+  const dateCaption = $('feed-date-caption');
+  const mainTitle = $('feed-main-title');
   const editionLabel = $('edition-label');
-  if (dateLabel) dateLabel.textContent = fmtDate(state.feed.date);
-  if (editionLabel) editionLabel.textContent = filterCategory ? `Filtro · ${filterCategory}` : 'Edición del día';
+  if (dateCaption) dateCaption.textContent = fmtDate(state.feed.date);
+  if (mainTitle) mainTitle.textContent = topic ? topic : 'Para ti hoy';
+  if (editionLabel) {
+    editionLabel.textContent = topic ? `Filtro · ${topic}` : 'Edición del día';
+  }
+
   if (!cards || cards.length === 0) {
-    feedList.innerHTML = `<div class="empty-state"><h2>${filterCategory ? `Sin noticias de ${filterCategory}` : 'Sin contenido todavía'}</h2></div>`;
+    feedList.innerHTML = `<div class="empty-state"><h2>${topic ? `Sin noticias de ${escapeHtml(topic)}` : 'Sin contenido todavía'}</h2></div>`;
     return;
   }
+
   const totalReadTime = Math.round(cards.reduce((a, c) => a + (c.read_time_seconds || 40), 0) / 60);
-  const locked = !filterCategory && !isPremium() && (state.feedMeta?.locked_count > 0);
-  const upsell = locked
-    ? `<section class="card card-upsell"><p class="upsell-text"><strong>${state.feedMeta.locked_count} noticia${state.feedMeta.locked_count === 1 ? '' : 's'} más</strong> en esta edición con <strong>Premium</strong> — 5 €/mes o 20 €/año (histórico + guardar).</p></section>`
-    : '';
-  let html = `<section class="card card-intro"><div class="intro-label">${filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día'}</div><h1 class="intro-title">${filterCategory ? `<em>${filterCategory}</em>` : 'Buenos días.'}</h1><p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p><div class="intro-stats"><div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div><div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura</div></div></div></section>${upsell}`;
+  const lockedCount = state.feedMeta?.locked_count ?? 0;
+  const showPremiumStrip =
+    !topic && !isPremium() && lockedCount > 0;
+
+  let html = '';
+  if (showPremiumStrip) {
+    html += `<div class="mb-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0_4px_20px_rgba(15,45,46,0.05)]">
+      <p class="font-ui-label text-sm leading-relaxed text-on-surface-variant">
+        <strong class="text-primary">${lockedCount} noticia${lockedCount === 1 ? '' : 's'} más</strong> en esta edición con <strong>Premium</strong> — 5 €/mes o 20 €/año (histórico + guardar).
+      </p>
+    </div>`;
+  }
+
   for (const c of cards) {
-    const catClass = CATEGORY_COLORS[c.category] || '';
+    const pill = categoryPillClass(c.category);
     const saved = state.savedIds.has(c.id);
     const saveLocked = !isPremium();
-    const saveClass = `${saved ? 'saved' : ''} ${saveLocked ? 'action-btn-save-lock' : ''}`;
-    html += `<section class="card" data-id="${c.id}"><div class="card-meta"><span class="category ${catClass}">${c.category}</span><span class="read-time">· ${c.read_time_seconds || 40} s</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${c.id}">${c.body}</p><button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${c.meaning}</p></div><div class="card-footer"><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${c.id}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`;
+    html += `
+<article class="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(15,45,46,0.05)] overflow-hidden border border-outline-variant/10" data-id="${c.id}">
+  <div class="p-stack-lg">
+    <div class="flex justify-between items-start gap-2 mb-stack-sm">
+      <span class="inline-block px-2 py-1 ${pill} text-[10px] font-bold uppercase rounded-sm">${escapeHtml(c.category)}</span>
+      <span class="font-ui-label text-caption text-outline whitespace-nowrap">${c.read_time_seconds || 40} s</span>
+    </div>
+    <h2 class="font-article-body text-2xl font-medium text-primary leading-tight mb-stack-sm">${escapeHtml(c.headline)}</h2>
+    <p class="font-article-body text-base text-on-surface-variant mb-stack-md leading-relaxed">${escapeHtml(c.deck)}</p>
+    <p class="font-ui-label text-[11px] font-bold uppercase tracking-wider text-secondary mb-2">Qué ha pasado</p>
+    <p class="font-article-body text-on-surface body-collapsed text-base leading-relaxed mb-2" id="body-${c.id}">${escapeHtml(c.body)}</p>
+    <button type="button" class="text-left font-ui-label text-xs font-semibold uppercase tracking-wider text-secondary mb-stack-md hover:opacity-80" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button>
+    <div class="bg-[#f0f7f7] p-stack-md rounded-lg border-l-4 border-secondary">
+      <h4 class="font-ui-label text-ui-label font-bold text-secondary mb-1">¿Qué significa para ti?</h4>
+      <p class="font-ui-label text-sm text-on-primary-fixed-variant leading-snug">${escapeHtml(c.meaning)}</p>
+    </div>
+    <div class="mt-stack-md flex items-center justify-end gap-2 border-t border-outline-variant/20 pt-4">
+      <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-outline-variant/40 text-primary-container hover:bg-surface-container transition-colors ${saved ? 'saved' : ''}"
+        title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}"
+        onclick="toggleSave('${c.id}', this)">
+        <span class="material-symbols-outlined text-[22px]">bookmark</span>
+      </button>
+      <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-outline-variant/40 text-primary-container hover:bg-surface-container transition-colors"
+        onclick="shareCard('${c.id}')" aria-label="Compartir">
+        <span class="material-symbols-outlined text-[22px]">share</span>
+      </button>
+    </div>
+  </div>
+</article>`;
   }
+
+  if (!topic && !isPremium() && lockedCount > 0) {
+    html += `
+<article class="relative bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(15,45,46,0.05)] overflow-hidden border border-outline-variant/10">
+  <div class="p-stack-lg">
+    <div class="flex justify-between items-start mb-stack-md">
+      <span class="inline-block px-2 py-1 bg-tertiary-fixed text-on-tertiary-fixed-variant text-[10px] font-bold uppercase rounded-sm">Premium</span>
+      <span class="material-symbols-outlined text-primary text-lg" style="font-variation-settings: 'FILL' 1;">lock</span>
+    </div>
+    <h2 class="font-article-body text-2xl font-medium text-primary leading-tight mb-stack-sm">Sigue leyendo la edición completa</h2>
+    <div class="relative min-h-[100px]">
+      <p class="font-article-body text-on-surface-variant text-base leading-relaxed opacity-40">
+        Desbloquea todas las noticias de hoy, el histórico de ediciones y guardar en tu cuenta…
+      </p>
+      <div class="absolute inset-0 premium-blur flex items-center justify-center rounded-lg">
+        <button type="button" class="bg-primary-container text-white px-stack-lg py-stack-md rounded-full font-ui-label text-sm font-bold shadow-lg active:scale-95 transition-transform"
+          onclick="startStripeCheckout('monthly')">Desbloquear con Premium</button>
+      </div>
+    </div>
+  </div>
+</article>`;
+  }
+
+  if (!topic) {
+    html += `
+<section class="premium-card-gradient p-stack-lg rounded-xl text-white mt-6 mb-2">
+  <h3 class="font-headline-md text-headline-md text-secondary-fixed mb-base-unit">Claridad semanal</h3>
+  <p class="font-ui-label text-sm opacity-90 mb-stack-md">Recibe el resumen dominical con lo que importa para tu patrimonio (próximamente).</p>
+  <button type="button" class="w-full rounded-lg bg-secondary-fixed py-3 font-bold text-primary-container hover:opacity-95 active:scale-[0.98] transition-transform"
+    onclick="toast('Newsletter próximamente')">Avísame</button>
+</section>`;
+  }
+
   feedList.innerHTML = html;
 }
 
 function renderTicker() {
   const tickerEl = $('ticker');
   if (!tickerEl) return;
-  
-  // Mostrar ticker simple desde mercados cargados
+
   const popular = ['^IBEX', 'AAPL', 'MSFT', 'BTC-USD', 'ETH-USD', 'TSLA'];
-  const items = popular.map(sym => state.markets.flat.find(m => m.symbol === sym)).filter(Boolean);
-  
+  const items = popular.map((sym) => state.markets.flat.find((m) => m.symbol === sym)).filter(Boolean);
+
   if (items.length === 0) {
     tickerEl.innerHTML = '';
     return;
   }
-  
-  tickerEl.innerHTML = items.map(m => {
-    const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
-    const prefix = m.symbol === 'GC=F' || m.symbol === 'BZ=F' ? '$' : '';
-    const priceDigits = m.price > 1000 ? 0 : 2;
-    return `<div class="ticker-item"><span class="ticker-name">${m.name}</span><span class="ticker-price">${prefix}${fmtNum(m.price, priceDigits)}</span><span class="ticker-change ${cls}">${fmtPct(m.change_pct)}</span></div>`;
-  }).join('');
+
+  tickerEl.innerHTML = items
+    .map((m) => {
+      const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
+      const prefix = m.symbol === 'GC=F' || m.symbol === 'BZ=F' ? '$' : '';
+      const priceDigits = m.price > 1000 ? 0 : 2;
+      return `<div class="ticker-item"><span class="ticker-name">${m.name}</span><span class="ticker-price">${prefix}${fmtNum(m.price, priceDigits)}</span><span class="ticker-change ${cls}">${fmtPct(m.change_pct)}</span></div>`;
+    })
+    .join('');
+}
+
+function renderMiniMarkets() {
+  const root = $('mini-markets');
+  if (!root) return;
+  const order = ['^IBEX', 'EURUSD=X', 'GC=F', 'BTC-USD', '^GSPC'];
+  const picked = [];
+  for (const sym of order) {
+    if (picked.length >= 2) break;
+    const m = state.markets.flat.find((x) => x.symbol === sym);
+    if (m) picked.push(m);
+  }
+  if (picked.length < 2) {
+    for (const m of state.markets.flat) {
+      if (picked.length >= 2) break;
+      if (!picked.find((p) => p.symbol === m.symbol)) picked.push(m);
+    }
+  }
+  if (picked.length === 0) {
+    root.innerHTML = '';
+    return;
+  }
+  root.innerHTML = picked
+    .map((m) => {
+      const cls =
+        m.change_pct > 0 ? 'text-secondary' : m.change_pct < 0 ? 'text-error' : 'text-on-surface-variant';
+      const prefix = m.symbol?.includes('=F') ? '$' : '';
+      let priceDigits = 2;
+      if (m.price > 1000) priceDigits = 0;
+      if (m.symbol?.includes('EUR') || m.category === 'divisas') priceDigits = 4;
+      const label = m.name.length > 22 ? `${m.name.slice(0, 20)}…` : m.name;
+      return `<div class="bg-surface-container-lowest p-stack-md rounded-xl shadow-[0_4px_20px_rgba(15,45,46,0.05)] flex flex-col border border-outline-variant/10">
+      <span class="font-ui-label text-caption text-on-surface-variant">${escapeHtml(label)}</span>
+      <div class="flex items-baseline gap-2 mt-1">
+        <span class="font-headline-md text-headline-md text-primary">${prefix}${fmtNum(m.price, priceDigits)}</span>
+        <span class="text-caption font-bold ${cls}">${fmtPct(m.change_pct)}</span>
+      </div>
+    </div>`;
+    })
+    .join('');
 }
 
 async function loadMarkets() {
@@ -323,9 +466,18 @@ async function loadMarkets() {
     state.marketsDisclaimer = state.markets.disclaimer || null;
     renderMarkets();
     renderTicker();
+    renderMiniMarkets();
   } catch (err) {
     console.error('Error loadMarkets:', err);
   }
+}
+
+function marketSparkSvg(up) {
+  const path = up
+    ? 'M0,18 L16,10 L32,14 L48,6 L64,8'
+    : 'M0,8 L16,16 L32,10 L48,20 L64,14';
+  const stroke = up ? '#2b6769' : '#ba1a1a';
+  return `<svg class="w-16 h-8 shrink-0 overflow-visible" viewBox="0 0 64 24" fill="none" aria-hidden="true"><path d="${path}" stroke="${stroke}" stroke-width="2" fill="none" /></svg>`;
 }
 
 function renderMarkets() {
@@ -350,12 +502,15 @@ function renderMarkets() {
     (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
   );
   const label = (c) => MARKET_CATEGORY_LABELS[c] || c;
+
+  const tabBtn = (id, title, active) =>
+    `<button type="button" class="rounded-full px-4 py-2 font-ui-label text-xs font-semibold uppercase tracking-wider transition-colors ${
+      active ? 'bg-primary-container text-white shadow-md' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container'
+    }" onclick="setMarketTab('${id}')">${title}</button>`;
+
   tabs.innerHTML =
-    `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` +
-    cats.map(
-      (cat) =>
-        `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${label(cat)}</div>`,
-    ).join('');
+    tabBtn('all', 'Todo', state.currentMarketTab === 'all') +
+    cats.map((cat) => tabBtn(cat, label(cat), state.currentMarketTab === cat)).join('');
 
   const groups =
     state.currentMarketTab === 'all'
@@ -366,49 +521,86 @@ function renderMarkets() {
     (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
   );
 
+  const rowCard = (m) => {
+    const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
+    const up = (m.change_pct ?? 0) >= 0;
+    const prefix = m.symbol?.includes('=F') ? '$' : '';
+    let priceDigits = 2;
+    if (m.price > 1000) priceDigits = 0;
+    else if (m.symbol?.includes('EUR') || m.category === 'divisas') priceDigits = 4;
+    else if (m.category === 'cripto' && m.price != null && m.price < 1) priceDigits = 4;
+    const tvSymbol = m.tv || TRADINGVIEW_MAP[m.symbol] || m.symbol;
+    const detailMeta = {
+      symbol: m.symbol,
+      name: m.name,
+      tv: tvSymbol,
+      category: m.category,
+      price: m.price,
+      change_pct: m.change_pct,
+    };
+    const pctCls =
+      cls === 'up' ? 'text-secondary' : cls === 'down' ? 'text-error' : 'text-on-surface-variant';
+    return `
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-[0_4px_20px_rgba(15,45,46,0.05)] border border-outline-variant/20 flex items-center justify-between gap-3 cursor-pointer active:scale-[0.99] transition-transform"
+  role="button" onclick='openMarketDetail(${JSON.stringify(detailMeta)})'>
+  <div class="flex-1 min-w-0">
+    <div class="font-ui-label text-ui-label text-primary font-bold truncate">${escapeHtml(m.name)}</div>
+    <div class="font-caption text-caption text-on-surface-variant truncate">${escapeHtml(m.description || '')}</div>
+  </div>
+  <div class="flex-1 flex justify-center">${marketSparkSvg(up)}</div>
+  <div class="flex-1 text-right">
+    <div class="font-ui-label text-ui-label text-primary font-bold">${m.price != null && !Number.isNaN(+m.price) ? `${prefix}${fmtNum(m.price, priceDigits)}` : '–'}</div>
+    <div class="font-caption text-caption font-bold ${pctCls}">${m.change_pct != null && !Number.isNaN(+m.change_pct) ? fmtPct(m.change_pct) : '–'}</div>
+  </div>
+</div>`;
+  };
+
+  const cryptoCard = (m) => {
+    const cls = m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
+    const up = (m.change_pct ?? 0) >= 0;
+    let priceDigits = 2;
+    if (m.category === 'cripto' && m.price != null && m.price < 1) priceDigits = 4;
+    const tvSymbol = m.tv || TRADINGVIEW_MAP[m.symbol] || m.symbol;
+    const detailMeta = {
+      symbol: m.symbol,
+      name: m.name,
+      tv: tvSymbol,
+      category: m.category,
+      price: m.price,
+      change_pct: m.change_pct,
+    };
+    const pctCls =
+      cls === 'up' ? 'text-secondary' : cls === 'down' ? 'text-error' : 'text-on-surface-variant';
+    return `
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-[0_4px_20px_rgba(15,45,46,0.05)] border border-outline-variant/20 cursor-pointer active:scale-[0.99] transition-transform"
+  role="button" onclick='openMarketDetail(${JSON.stringify(detailMeta)})'>
+  <div class="flex justify-between items-start mb-4">
+    <span class="material-symbols-outlined text-primary-container text-[28px]">currency_bitcoin</span>
+    <div class="font-caption text-caption font-bold ${pctCls}">${m.change_pct != null && !Number.isNaN(+m.change_pct) ? fmtPct(m.change_pct) : '–'}</div>
+  </div>
+  <div class="font-ui-label text-ui-label text-primary font-bold truncate">${escapeHtml(m.name)}</div>
+  <div class="font-headline-md text-headline-md text-primary-container mt-1">${m.price != null && !Number.isNaN(+m.price) ? fmtNum(m.price, priceDigits) : '–'}</div>
+  <div class="mt-4 w-full">${marketSparkSvg(up)}</div>
+</div>`;
+  };
+
   let html = '';
   for (const cat of sectionOrder) {
     const items = groups[cat];
     if (!items?.length) continue;
-    html += `<div class="market-section"><h3 class="market-section-title">${label(cat)}</h3>`;
-    for (const m of items) {
-      const cls =
-        m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
-      const prefix = m.symbol?.includes('=F') ? '$' : '';
-      let priceDigits = 2;
-      if (m.price > 1000) priceDigits = 0;
-      else if (m.symbol?.includes('EUR') || m.category === 'divisas') priceDigits = 4;
-      else if (m.category === 'cripto' && m.price != null && m.price < 1) priceDigits = 4;
-      const tvSymbol = m.tv || TRADINGVIEW_MAP[m.symbol] || m.symbol;
-      const detailMeta = {
-        symbol: m.symbol,
-        name: m.name,
-        tv: tvSymbol,
-        category: m.category,
-        price: m.price,
-        change_pct: m.change_pct,
-      };
-
-      html += `
-        <div class="market-item" style="cursor: pointer;" role="button" onclick='openMarketDetail(${JSON.stringify(detailMeta)})'>
-          <div class="market-item-left">
-            <div class="market-item-name">${m.name}</div>
-            <div class="market-item-desc">${m.description || ''}</div>
-          </div>
-          <div class="market-item-right">
-            <div class="market-price">${m.price != null && !Number.isNaN(+m.price) ? `${prefix}${fmtNum(m.price, priceDigits)}` : '–'}</div>
-            <div class="market-change ${cls}">${m.change_pct != null && !Number.isNaN(+m.change_pct) ? fmtPct(m.change_pct) : '–'}</div>
-          </div>
-        </div>
-      `;
+    html += `<section class="mb-stack-lg"><h2 class="font-headline-md text-headline-md text-primary-container mb-stack-md">${label(cat)}</h2>`;
+    if (cat === 'cripto') {
+      html += `<div class="grid grid-cols-2 gap-4">${items.map((m) => cryptoCard(m)).join('')}</div>`;
+    } else {
+      html += `<div class="space-y-stack-md">${items.map((m) => rowCard(m)).join('')}</div>`;
     }
-    html += `</div>`;
+    html += `</section>`;
   }
 
   const disc = state.marketsDisclaimer
-    ? `<p class="markets-disclaimer">${state.marketsDisclaimer}</p>`
+    ? `<p class="font-ui-label text-caption text-on-surface-variant mt-6 px-1">${escapeHtml(state.marketsDisclaimer)}</p>`
     : '';
-  marketsList.innerHTML = html + disc;
+  marketsList.innerHTML = (html || `<div class="empty-state"><h2>Sin datos</h2></div>`) + disc;
 }
 
 function setMarketTab(tab) {
@@ -666,19 +858,47 @@ const TOPICS = [
   { key: 'España', name: 'España', icon: 'E' },
 ];
 
-function renderTopics() {
-  const grid = $('topics-grid');
-  if (!grid) return;
+function renderTopicChips() {
+  const el = $('topic-chips');
+  if (!el) return;
   const counts = {};
   for (const c of state.feed.cards) counts[c.category] = (counts[c.category] || 0) + 1;
-  grid.innerHTML = TOPICS.map(t => `<div class="ambito-card ${t.featured ? 'featured' : ''}" onclick="filterByTopic('${t.key}')"><div class="ambito-icon">${t.icon}</div><div class="ambito-name">${t.name}</div><div class="ambito-meta">${counts[t.key] || 0} hoy</div></div>`).join('');
-  state._topicsRendered = true;
+  const active = state.activeTopicFilter;
+  const chipClass = (on) =>
+    `shrink-0 rounded-full px-3 py-1.5 font-ui-label text-xs font-semibold whitespace-nowrap transition-colors border ${
+      on
+        ? 'bg-primary-container text-white border-primary-container shadow-sm'
+        : 'bg-white text-on-surface-variant border-outline-variant/60 hover:bg-surface-container'
+    }`;
+
+  const parts = [
+    `<button type="button" class="${chipClass(active == null)}" onclick="clearTopicFilter()">Todo</button>`,
+  ];
+  for (const t of TOPICS) {
+    const on = active === t.key;
+    const n = counts[t.key] || 0;
+    parts.push(
+      `<button type="button" class="${chipClass(on)}" onclick='filterByTopic(${JSON.stringify(t.key)})'>${escapeHtml(t.name)} · ${n}</button>`,
+    );
+  }
+  el.innerHTML = parts.join('');
+}
+
+function clearTopicFilter() {
+  state.activeTopicFilter = null;
+  renderTopicChips();
+  renderFeed();
 }
 
 function filterByTopic(topic) {
-  const matching = state.feed.cards.filter(c => c.category === topic);
-  if (matching.length === 0) { toast(`Sin noticias de ${topic} hoy`); return; }
+  const matching = state.feed.cards.filter((c) => c.category === topic);
+  if (matching.length === 0) {
+    toast(`Sin noticias de ${topic} hoy`);
+    return;
+  }
+  state.activeTopicFilter = topic;
   switchScreen('today');
+  renderTopicChips();
   renderFeed(topic);
 }
 
@@ -745,19 +965,35 @@ async function renderSaved() {
   const savedList = $('saved-list');
   if (!savedList) return;
   if (!isLoggedIn()) {
-    savedList.innerHTML = `<div class="empty-state"><h2>Inicia sesión</h2><button class="cta" onclick="openLoginModal()">Entrar</button></div>`;
+    savedList.innerHTML = `<div class="empty-state rounded-2xl border border-outline-variant/30 bg-white px-6 py-10 shadow-sm">
+      <h2 class="font-display-lg text-xl text-primary-container">Inicia sesión</h2>
+      <p class="font-ui-label text-sm text-on-surface-variant mt-2">Guarda noticias y accede desde cualquier dispositivo.</p>
+      <button type="button" class="mt-6 w-full rounded-xl bg-primary-container py-3 font-semibold text-white shadow-md active:scale-[0.98] transition-transform" onclick="openLoginModal()">Entrar</button>
+    </div>`;
     return;
   }
   if (!isPremium()) {
-    savedList.innerHTML = `<div class="empty-state"><h2>Guardados · Premium</h2><p style="max-width:320px;margin:12px auto 0;line-height:1.5;color:var(--ink-dim);">Las cuentas gratuitas leen hasta 5 noticias del día. <strong>Guardar</strong> noticias y el <strong>histórico</strong> de ediciones incluyen Premium (5 €/mes o 20 €/año).</p></div>`;
+    savedList.innerHTML = `<div class="relative overflow-hidden rounded-xl bg-primary-container p-8 text-white shadow-lg">
+      <div class="relative z-10 flex flex-col">
+        <span class="font-ui-label text-caption bg-secondary text-on-secondary px-3 py-1 rounded-full w-fit mb-4">Membresía Premium</span>
+        <h3 class="font-display-lg text-headline-md mb-2">Guarda tus análisis favoritos</h3>
+        <p class="font-ui-label text-sm opacity-90 mb-6 max-w-xs">Las cuentas gratuitas leen hasta 5 noticias del día. Guardar e histórico completos son Premium (5 €/mes o 20 €/año).</p>
+        <button type="button" class="bg-secondary text-white font-ui-label font-bold py-3 px-6 rounded-lg w-full hover:opacity-90 active:scale-95 transition-transform flex items-center justify-center gap-2" onclick="startStripeCheckout('monthly')">
+          Actualizar a Premium
+          <span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+        </button>
+      </div>
+      <div class="absolute top-0 right-0 w-48 h-48 bg-secondary opacity-20 rounded-full -mr-24 -mt-24 pointer-events-none"></div>
+      <div class="absolute bottom-0 left-0 w-32 h-32 bg-secondary opacity-10 rounded-full -ml-16 -mb-16 pointer-events-none"></div>
+    </div>`;
     return;
   }
-  savedList.innerHTML = `<div class="loading">Cargando...</div>`;
+  savedList.innerHTML = `<div class="loading">Cargando…</div>`;
   try {
     await waitForSupabase();
     const ids = [...state.savedIds];
     if (ids.length === 0) {
-      savedList.innerHTML = `<div class="empty-state"><h2>Aún no guardaste nada</h2></div>`;
+      savedList.innerHTML = `<div class="empty-state"><h2 class="font-display-lg text-xl text-primary-container">Aún no guardaste nada</h2><p class="font-ui-label text-sm text-on-surface-variant mt-2">Toca el marcador en una noticia en Hoy.</p></div>`;
       return;
     }
     const { data: rows, error } = await supabaseClient.from('cards').select('*').in('id', ids).eq('status', 'published');
@@ -765,12 +1001,37 @@ async function renderSaved() {
     const byId = new Map((rows || []).map((c) => [c.id, c]));
     const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
     state._savedCardCache = Object.fromEntries(ordered.map((c) => [c.id, c]));
-    savedList.innerHTML = ordered.length === 0
-      ? `<div class="empty-state"><h2>No hay guardados visibles</h2></div>`
-      : ordered.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div><h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button type="button" class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
+    savedList.innerHTML =
+      ordered.length === 0
+        ? `<div class="empty-state"><h2>No hay guardados visibles</h2></div>`
+        : ordered
+            .map((c) => {
+              const pill = categoryPillClass(c.category);
+              return `<article class="bg-surface-container-lowest p-[20px] rounded-xl shadow-[0_4px_20px_rgba(15,45,46,0.05)] border border-outline-variant/10">
+  <div class="flex justify-between items-start mb-base-unit gap-2">
+    <span class="font-ui-label text-caption ${pill} px-2 py-0.5 rounded-full uppercase tracking-wider">${escapeHtml(c.category)}</span>
+  </div>
+  <h3 class="font-article-body text-headline-md text-on-surface mb-stack-sm leading-tight">${escapeHtml(c.headline)}</h3>
+  <p class="font-ui-label text-ui-label text-on-surface-variant mb-stack-md line-clamp-2">${escapeHtml(c.deck)}</p>
+  ${
+    c.meaning
+      ? `<div class="bg-[#F1F5F5] p-stack-md rounded-lg border-l-4 border-primary-container mb-stack-md">
+    <p class="font-ui-label text-caption font-bold text-primary-container mb-1 uppercase tracking-tighter">Impacto para ti</p>
+    <p class="font-ui-label text-ui-label text-on-primary-container">${escapeHtml(c.meaning)}</p>
+  </div>`
+      : ''
+  }
+  <div class="mt-stack-md flex justify-end">
+    <button type="button" class="saved inline-flex text-primary-container" onclick="toggleSave('${c.id}', this)" aria-label="Quitar guardado">
+      <span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">bookmark</span>
+    </button>
+  </div>
+</article>`;
+            })
+            .join('');
   } catch (err) {
     console.error('renderSaved:', err);
-    savedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
+    savedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${escapeHtml(err.message)}</p></div>`;
   }
 }
 
@@ -801,8 +1062,8 @@ function openLoginModal() {
 
 function openProfile() {
   if (state.session) {
-    renderProfileModal();
-    $('profile-modal')?.classList.add('open');
+    switchScreen('profile');
+    renderProfilePage();
   } else {
     openLoginModal();
   }
@@ -885,8 +1146,144 @@ async function handleCheckoutReturn() {
     await loadProfile(state.session.user.id);
     updateProfileBtn();
     renderFeed();
+    renderTopicChips();
+    if (state.currentScreen === 'profile') renderProfilePage();
     if ($('profile-modal')?.classList.contains('open')) renderProfileModal();
   }
+}
+
+function profileSettingsListHtml(suffix) {
+  const idRem = `reminder-toggle${suffix}`;
+  const idOff = `offline-toggle${suffix}`;
+  return `
+<section class="space-y-stack-sm mb-6">
+  <p class="font-ui-label text-[12px] uppercase tracking-widest text-outline px-1">Ajustes</p>
+  <div class="bg-white rounded-xl shadow-[0_4px_20px_rgba(15,45,46,0.05)] overflow-hidden border border-outline-variant/10">
+    <div class="flex justify-between items-center p-4 border-b border-surface-container">
+      <div>
+        <div class="font-ui-label text-sm font-semibold text-on-surface">Recordatorio diario</div>
+        <div class="font-ui-label text-xs text-on-surface-variant">Notificación a las 7:30</div>
+      </div>
+      <input type="checkbox" id="${idRem}" class="h-5 w-5 accent-[#0f2d2e] cursor-pointer" ${state.profile?.daily_reminder_enabled ? 'checked' : ''} onchange="toggleDailyReminder()" />
+    </div>
+    <div class="flex justify-between items-center p-4 border-b border-surface-container opacity-60">
+      <div>
+        <div class="font-ui-label text-sm font-semibold text-on-surface">Tema claro</div>
+        <div class="font-ui-label text-xs text-on-surface-variant">Interfaz editorial Serene Capital</div>
+      </div>
+      <input type="checkbox" checked disabled class="h-5 w-5 cursor-not-allowed" />
+    </div>
+    <div class="flex justify-between items-center p-4 border-b border-surface-container">
+      <div>
+        <div class="font-ui-label text-sm font-semibold text-on-surface">Guardar offline</div>
+        <div class="font-ui-label text-xs text-on-surface-variant">Lee sin conexión</div>
+      </div>
+      <input type="checkbox" id="${idOff}" class="h-5 w-5 accent-[#0f2d2e] cursor-pointer" ${localStorage.getItem('lente.offline-mode') === '1' ? 'checked' : ''} onchange="toggleOfflineMode()" />
+    </div>
+    <div class="flex justify-between items-center p-4">
+      <div>
+        <div class="font-ui-label text-sm font-semibold text-on-surface">Instalar app</div>
+        <div class="font-ui-label text-xs text-on-surface-variant">PWA en tu dispositivo</div>
+      </div>
+      <button type="button" class="rounded-lg bg-secondary px-3 py-2 font-ui-label text-xs font-bold text-white hover:opacity-90" onclick="installPWAFromModal()">${getInstallButtonLabel()}</button>
+    </div>
+  </div>
+</section>
+<button type="button" class="w-full flex items-center justify-center gap-2 py-4 text-error font-bold rounded-xl border border-error-container hover:bg-error-container/10 transition-colors active:scale-[0.98] mb-4" onclick="signOut()">
+  <span class="material-symbols-outlined">logout</span>
+  Cerrar sesión
+</button>
+<p class="text-center text-[10px] text-outline font-ui-label pb-4">lente · MVP</p>`;
+}
+
+function renderProfilePage() {
+  const container = $('profile-screen-body');
+  if (!container) return;
+  if (!state.session?.user) {
+    container.innerHTML = `<div class="text-center py-16 px-4">
+      <p class="font-ui-label text-on-surface-variant mb-6 max-w-xs mx-auto">Inicia sesión para ver tu plan, facturación y ajustes.</p>
+      <button type="button" class="w-full max-w-sm mx-auto rounded-xl bg-primary-container py-3 font-semibold text-white shadow-md active:scale-[0.98] transition-transform" onclick="openLoginModal()">Entrar o registrarse</button>
+    </div>`;
+    return;
+  }
+  const user = state.session.user;
+  const rawEmail = user.email || '';
+  const email = escapeHtml(rawEmail);
+  const shortName = escapeHtml(rawEmail.split('@')[0] || '?');
+  const initial = escapeHtml((rawEmail[0] || '?').toUpperCase());
+  const isPrem = isPremium();
+
+  const badge = isPrem
+    ? `<span class="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-ui-label text-[12px] uppercase tracking-wider font-bold">Premium</span>`
+    : `<span class="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-ui-label text-[12px] uppercase tracking-wider font-bold">Plan gratuito</span>`;
+
+  const premiumCard = !isPrem
+    ? `<section class="premium-card-gradient rounded-xl p-5 text-white shadow-xl mb-stack-lg">
+  <div class="flex justify-between items-start mb-4">
+    <h3 class="font-headline-md text-headline-md leading-tight text-secondary-fixed">Hazte Premium</h3>
+    <span class="material-symbols-outlined text-secondary-fixed" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+  </div>
+  <ul class="space-y-3 mb-6">
+    <li class="flex items-center gap-3"><span class="material-symbols-outlined text-secondary-fixed text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span><span class="font-ui-label text-sm">Histórico de ediciones</span></li>
+    <li class="flex items-center gap-3"><span class="material-symbols-outlined text-secondary-fixed text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span><span class="font-ui-label text-sm">Guardados ilimitados</span></li>
+    <li class="flex items-center gap-3"><span class="material-symbols-outlined text-secondary-fixed text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span><span class="font-ui-label text-sm">Todas las noticias del día</span></li>
+  </ul>
+  <div class="flex flex-col gap-2">
+    <button type="button" class="w-full bg-secondary-fixed text-primary-container py-3 rounded-lg font-bold hover:opacity-90 active:scale-[0.98] transition-transform" onclick="startStripeCheckout('monthly')">5 € / mes</button>
+    <button type="button" class="w-full border border-white/40 text-white py-3 rounded-lg font-bold hover:bg-white/10" onclick="startStripeCheckout('yearly')">20 € / año</button>
+  </div>
+</section>`
+    : `<section class="mb-stack-lg rounded-xl border border-outline-variant/30 bg-white p-4 shadow-sm">
+  <button type="button" class="w-full rounded-lg border border-secondary py-3 font-semibold text-secondary hover:bg-surface-container transition-colors" onclick="openStripePortal()">Gestionar suscripción y facturas</button>
+</section>`;
+
+  const billingRow = `<a class="flex items-center justify-between p-4 hover:bg-surface-container-low transition-colors border-b border-surface-container" href="#" onclick="event.preventDefault();openStripePortal();">
+  <div class="flex items-center gap-4">
+    <div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary-container">
+      <span class="material-symbols-outlined">payments</span>
+    </div>
+    <span class="font-ui-label text-on-surface font-semibold">Facturación</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <span class="font-caption text-outline text-xs">Stripe</span>
+    <span class="material-symbols-outlined text-outline text-sm">chevron_right</span>
+  </div>
+</a>`;
+
+  container.innerHTML = `
+<section class="flex flex-col items-center text-center space-y-2 mb-stack-lg">
+  <div class="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center text-3xl font-semibold text-primary-container shadow-lg border-4 border-white">${initial}</div>
+  <h2 class="font-display-lg text-display-lg text-primary-container">${shortName}</h2>
+  <p class="font-ui-label text-on-surface-variant">${email}</p>
+  ${badge}
+</section>
+${premiumCard}
+<section class="space-y-stack-sm mb-6">
+  <p class="font-ui-label text-[12px] uppercase tracking-widest text-outline px-1">Configuración</p>
+  <div class="bg-white rounded-xl shadow-[0_4px_20px_rgba(15,45,46,0.05)] overflow-hidden border border-outline-variant/10">
+    ${billingRow}
+    <div class="flex items-center justify-between p-4 border-b border-surface-container opacity-80">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary-container">
+          <span class="material-symbols-outlined">notifications</span>
+        </div>
+        <span class="font-ui-label text-on-surface font-semibold">Notificaciones</span>
+      </div>
+      <span class="material-symbols-outlined text-outline">chevron_right</span>
+    </div>
+    <div class="flex items-center justify-between p-4">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary-container">
+          <span class="material-symbols-outlined">help_outline</span>
+        </div>
+        <span class="font-ui-label text-on-surface font-semibold">Ayuda</span>
+      </div>
+      <span class="material-symbols-outlined text-outline">chevron_right</span>
+    </div>
+  </div>
+</section>
+${profileSettingsListHtml('')}
+`;
 }
 
 function renderProfileModal() {
@@ -894,52 +1291,27 @@ function renderProfileModal() {
   if (!modal) return;
   const user = state.session?.user;
   if (!user) return;
-  const email = user.email || '';
+  const rawEmail = user.email || '';
+  const emailSafe = escapeHtml(rawEmail);
+  const initial = escapeHtml((rawEmail[0] || '?').toUpperCase());
   const isPrem = isPremium();
-  const planBadge = isPrem ? `<span style="background:#2a6b3a;color:#7fd89a;padding:3px 10px;border-radius:20px;font-size:12px;">Premium</span>` : `<span style="background:#2a2a2a;color:#9a958b;padding:3px 10px;border-radius:20px;font-size:12px;">Free</span>`;
-  
+  const planBadge = isPrem
+    ? `<span class="inline-flex items-center px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-wider">Premium</span>`
+    : `<span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold uppercase tracking-wider">Free</span>`;
+
   modal.innerHTML = `
-    <div style="text-align:center;padding:20px 0;border-bottom:1px solid #3a3530;margin-bottom:20px;">
-      <div style="width:56px;height:56px;border-radius:50%;background:var(--surface-2);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;">${email[0]?.toUpperCase() || '?'}</div>
-      <div style="font-size:15px;font-weight:500;">${email}</div>
-      <div style="margin-top:8px;">${planBadge}</div>
-      ${!isPrem ? `<p style="font-size:13px;color:var(--ink-dim);margin-top:14px;line-height:1.45;">Plan <strong>Free</strong>: 5 noticias del día y mercados. <strong>Premium</strong>: todas las noticias, histórico y guardar.</p>
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
-        <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:10px;">Suscripción Premium</div>
-        <p style="font-size:12px;color:var(--ink-muted);margin:0 0 12px;line-height:1.4;">Pago seguro con Stripe · cancela cuando quieras</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button type="button" onclick="startStripeCheckout('monthly')" style="flex:1;min-width:120px;padding:12px 14px;background:#c9a961;border:none;border-radius:10px;color:#1a1a1a;font-weight:600;cursor:pointer;font-size:13px;">5 € / mes</button>
-          <button type="button" onclick="startStripeCheckout('yearly')" style="flex:1;min-width:120px;padding:12px 14px;background:transparent;border:1px solid var(--border);color:var(--ink);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">20 € / año</button>
-        </div>
-      </div>` : `
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a2a;">
-        <button type="button" onclick="openStripePortal()" style="width:100%;padding:12px;background:transparent;border:1px solid rgba(201,169,97,0.45);color:var(--accent);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">Gestionar suscripción y facturas</button>
-      </div>`}
-    </div>
-    <div style="margin-bottom:20px;">
-      <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:12px;">AJUSTES</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
-        <div><div style="font-size:14px;font-weight:500;">Recordatorio diario</div><div style="font-size:12px;color:var(--ink-dim);">Notificación a las 7:30</div></div>
-        <input type="checkbox" id="reminder-toggle" ${state.profile?.daily_reminder_enabled ? 'checked' : ''} onchange="toggleDailyReminder()" style="cursor:pointer;width:18px;height:18px;">
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
-        <div><div style="font-size:14px;font-weight:500;">Tema oscuro</div><div style="font-size:12px;color:var(--ink-dim);">Activado siempre</div></div>
-        <input type="checkbox" checked disabled style="cursor:not-allowed;width:18px;height:18px;opacity:0.5;">
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #2a2a2a;">
-        <div><div style="font-size:14px;font-weight:500;">Guardar offline</div><div style="font-size:12px;color:var(--ink-dim);">Lee sin conexión</div></div>
-        <input type="checkbox" id="offline-toggle" ${localStorage.getItem('lente.offline-mode') === '1' ? 'checked' : ''} onchange="toggleOfflineMode()" style="cursor:pointer;width:18px;height:18px;">
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
-        <div><div style="font-size:14px;font-weight:500;">Instalar app</div><div style="font-size:12px;color:var(--ink-dim);">PWA en tu dispositivo</div></div>
-        <button type="button" onclick="installPWAFromModal()" style="padding:6px 12px;background:#c9a961;border:none;border-radius:6px;color:#1a1a1a;font-size:12px;font-weight:600;cursor:pointer;">${getInstallButtonLabel()}</button>
-      </div>
-    </div>
-    <button class="cta" id="logout-btn" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--ink-dim);">Cerrar sesión</button>
-  `;
-  
-  const logoutBtn = $('logout-btn');
-  if (logoutBtn) logoutBtn.onclick = signOut;
+<div class="text-center pb-4 border-b border-outline-variant/40 mb-4">
+  <div class="w-14 h-14 rounded-full bg-surface-container-high mx-auto mb-3 flex items-center justify-center text-xl font-semibold text-primary-container">${initial}</div>
+  <div class="font-ui-label text-sm font-semibold text-on-surface">${emailSafe}</div>
+  <div class="mt-2 flex justify-center">${planBadge}</div>
+  ${!isPrem ? `<p class="text-xs text-on-surface-variant mt-3 leading-relaxed max-w-xs mx-auto">Plan gratuito: 5 noticias del día. <strong>Premium</strong>: edición completa, histórico y guardar.</p>
+  <div class="flex gap-2 mt-4 flex-wrap justify-center">
+    <button type="button" class="flex-1 min-w-[120px] rounded-lg bg-secondary py-2.5 text-sm font-bold text-white" onclick="startStripeCheckout('monthly')">5 € / mes</button>
+    <button type="button" class="flex-1 min-w-[120px] rounded-lg border border-outline-variant py-2.5 text-sm font-bold text-on-surface" onclick="startStripeCheckout('yearly')">20 € / año</button>
+  </div>` : `<button type="button" class="mt-4 w-full rounded-lg border border-secondary py-2.5 text-sm font-semibold text-secondary" onclick="openStripePortal()">Gestionar suscripción</button>`}
+</div>
+${profileSettingsListHtml('-modal')}
+`;
 }
 
 async function signOut() {
@@ -1187,7 +1559,9 @@ async function runInstallFlow() {
 
 async function installPWAFromModal() {
   await runInstallFlow();
-  if (state.session && $('profile-modal')?.classList.contains('open')) renderProfileModal();
+  if (!state.session) return;
+  if ($('profile-modal')?.classList.contains('open')) renderProfileModal();
+  if (state.currentScreen === 'profile') renderProfilePage();
 }
 
 function installPWA() {
@@ -1201,8 +1575,15 @@ let loginMode = 'login';
 function showTab(mode) {
   loginMode = mode;
   const isLogin = mode === 'login';
-  if ($('tab-login')) { $('tab-login').style.background = isLogin ? '' : 'transparent'; $('tab-login').style.color = isLogin ? '' : '#9a958b'; }
-  if ($('tab-register')) { $('tab-register').style.background = isLogin ? 'transparent' : ''; $('tab-register').style.color = isLogin ? '#9a958b' : ''; }
+  const tLogin = $('tab-login');
+  const tReg = $('tab-register');
+  const activeCls = 'cta flex-1 rounded-lg px-3 py-2 text-sm font-semibold';
+  const idleCls =
+    'cta flex-1 rounded-lg border border-outline-variant bg-transparent px-3 py-2 text-sm font-semibold text-on-surface-variant';
+  if (tLogin && tReg) {
+    tLogin.className = isLogin ? activeCls : idleCls;
+    tReg.className = !isLogin ? activeCls : idleCls;
+  }
   if ($('login-submit-btn')) $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
   if ($('login-status')) $('login-status').textContent = '';
 }
@@ -1305,6 +1686,7 @@ async function setupAuthListener() {
       } else if (event === 'SIGNED_OUT') {
         state.profile = null;
         state.savedIds.clear();
+        state.activeTopicFilter = null;
         localStorage.removeItem('lente.profile');
         updateProfileBtn();
         await loadFeed();
