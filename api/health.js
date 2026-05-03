@@ -3,6 +3,10 @@
 // ============================================================
 
 import { createClient } from '@supabase/supabase-js';
+import {
+  getStripeSecretKey,
+  getStripeSecretKeyDiagnostics,
+} from './_lib/clients.js';
 
 export default async function handler(req, res) {
   const checks = {
@@ -52,12 +56,35 @@ export default async function handler(req, res) {
     checks.vars.FINNHUB_API_KEY = '○ sin configurar (solo RSS)';
   }
 
-  const sk = process.env.STRIPE_SECRET_KEY;
-  if (sk && !sk.includes('...') && sk.length > 20) {
+  const sk = getStripeSecretKey();
+  const stripeDx = getStripeSecretKeyDiagnostics();
+  if (sk) {
     checks.vars.STRIPE = `○ pagos (${sk.slice(0, 7)}...)`;
   } else {
-    checks.vars.STRIPE = '○ suscripciones desactivadas (faltan claves Stripe)';
+    const hints = {
+      unset:
+        'STRIPE_SECRET_KEY no está en este deployment. En Vercel: edita la variable y marca Production + Preview (o Development), guarda y Redeploy. Las URLs de preview no usan solo Production.',
+      placeholder:
+        'Valor tipo placeholder (… o changeme). Pega la Secret key completa desde Stripe → Developers → API keys.',
+      bad_prefix:
+        'Debe ser la Secret key (sk_test_… / sk_live_…), no la publishable (pk_…).',
+      too_short: 'Key demasiado corta (copia incompleta).',
+    };
+    const reason = stripeDx.reason || 'invalid';
+    checks.vars.STRIPE = `○ suscripciones desactivadas — ${hints[reason] || reason}`;
   }
+  checks.stripe_key_status = stripeDx.ok
+    ? { ok: true }
+    : {
+        ok: false,
+        reason: stripeDx.reason,
+        vercel_env_hint:
+          process.env.VERCEL_ENV === 'preview'
+            ? 'Este request es un deployment Preview: la variable debe existir para entorno "Preview".'
+            : process.env.VERCEL_ENV === 'production'
+              ? 'Deployment Production: la variable debe existir para entorno "Production".'
+              : null,
+      };
 
   // Ping a Supabase + verificar tablas
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {

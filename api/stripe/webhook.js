@@ -3,15 +3,23 @@
 
 import Stripe from 'stripe';
 import getRawBody from 'raw-body';
-import { getSupabaseAdmin } from '../_lib/clients.js';
+import { getSupabaseAdmin, getStripeSecretKey } from '../_lib/clients.js';
 
 export default async function handler(req, res) {
+  // GET en navegador: Stripe solo usa POST; esto evita confundir un 405 con un deploy roto
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      ok: true,
+      message:
+        'Webhook de Stripe: configura esta URL con método POST. Abrir aquí en el navegador siempre será GET.',
+    });
+  }
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
-  const secret = process.env.STRIPE_SECRET_KEY?.trim();
+  const secret = getStripeSecretKey();
 
   if (!webhookSecret || !secret) {
     console.error('[stripe webhook] Falta STRIPE_WEBHOOK_SECRET o STRIPE_SECRET_KEY');

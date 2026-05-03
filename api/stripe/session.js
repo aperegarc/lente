@@ -4,16 +4,25 @@
 // Header: Authorization: Bearer <supabase_jwt>
 
 import Stripe from 'stripe';
-import { getUserFromToken, getDeploymentUrl, getSupabaseAdmin } from '../_lib/clients.js';
+import {
+  getUserFromToken,
+  getDeploymentUrl,
+  getSupabaseAdmin,
+  getStripeSecretKey,
+} from '../_lib/clients.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const secret = process.env.STRIPE_SECRET_KEY?.trim();
-  if (!secret || secret.includes('...')) {
-    return res.status(500).json({ error: 'STRIPE_SECRET_KEY no configurada' });
+  const secret = getStripeSecretKey();
+  if (!secret) {
+    return res.status(500).json({
+      error: 'STRIPE_SECRET_KEY no configurada',
+      hint:
+        'En Vercel: guarda STRIPE_SECRET_KEY (Developers → API keys en Stripe) y haz Redeploy. En local: copia la misma línea en .env.local',
+    });
   }
 
   let body = {};

@@ -14,6 +14,35 @@ function requireEnv(name, hint = '') {
   return value.trim();
 }
 
+function normalizeStripeSecretInput() {
+  let s = process.env.STRIPE_SECRET_KEY;
+  if (s == null || s === '') return { value: null, reason: 'unset' };
+  s = String(s).trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  if (!s) return { value: null, reason: 'unset' };
+  if (s.includes('...') || s === 'changeme') return { value: null, reason: 'placeholder' };
+  if (!s.startsWith('sk_')) return { value: null, reason: 'bad_prefix' };
+  if (s.length < 20) return { value: null, reason: 'too_short' };
+  return { value: s, reason: null };
+}
+
+/** Secret key de Stripe (`sk_test_…` / `sk_live_`). Quita comillas si se pegaron por error. */
+export function getStripeSecretKey() {
+  return normalizeStripeSecretInput().value;
+}
+
+/** Para `/api/health`: por qué falla Stripe sin exponer la clave. */
+export function getStripeSecretKeyDiagnostics() {
+  const { value, reason } = normalizeStripeSecretInput();
+  if (value) return { ok: true, reason: null };
+  return { ok: false, reason };
+}
+
 export function getSupabaseAdmin() {
   const url = requireEnv('SUPABASE_URL', 'Debe empezar por https://...supabase.co');
   const key = requireEnv('SUPABASE_SERVICE_KEY', 'Se encuentra en Supabase → Project Settings → API Keys');
