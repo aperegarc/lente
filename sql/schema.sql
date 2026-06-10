@@ -168,12 +168,13 @@ CREATE TABLE IF NOT EXISTS saved_cards (
 
 -- ============================================================
 -- ROW LEVEL SECURITY (quién puede leer/escribir qué)
+-- IMPORTANTE: ejecutar también sql/security-hardening.sql en producción
 -- ============================================================
 
--- Cards publicadas: leíbles por todos
+-- Cards: RLS ON; lectura pública solo vía API (service_role). Ver security-hardening.sql
 ALTER TABLE cards ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "cards_public_read" ON cards
-  FOR SELECT USING (status = 'published');
+-- Política legacy (sustituida por REVOKE en security-hardening.sql):
+-- CREATE POLICY "cards_public_read" ON cards FOR SELECT USING (status = 'published');
 
 -- Markets: leíbles por todos
 ALTER TABLE markets ENABLE ROW LEVEL SECURITY;

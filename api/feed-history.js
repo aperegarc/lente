@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     .select('edition_date')
     .eq('status', 'published');
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: 'Error interno' });
 
   const counts = {};
   for (const r of rows || []) {

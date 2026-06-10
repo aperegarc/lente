@@ -27,7 +27,10 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(url, {
-      headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+      headers: {
+        authorization: `Bearer ${process.env.CRON_SECRET}`,
+        'x-lente-internal-trigger': '1',
+      },
     });
     const data = await response.json();
     console.log(`[trigger] ${job} (${response.status}):`, data);

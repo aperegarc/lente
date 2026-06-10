@@ -9,6 +9,19 @@
 
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://query1.finance.yahoo.com https://api.frankfurter.app https://api.coingecko.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        }
+      ]
+    },
+    {
       "source": "/sw.js",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
@@ -24,11 +37,11 @@
   ],
 
   "rewrites": [
+    { "source": "/config.js", "destination": "/api/public-config" },
     { "source": "/admin", "destination": "/admin.html" },
     { "source": "/chart/:path*", "destination": "/index.html" },
     { "source": "/api/cron/ingest", "destination": "/api/crons?job=ingest" },
     { "source": "/api/cron/generate", "destination": "/api/crons?job=generate" },
-    { "source": "/api/cron/markets-update", "destination": "/api/crons?job=markets-update" },
     { "source": "/api/cron/markets", "destination": "/api/crons?job=markets" }
   ],
 
@@ -44,7 +57,7 @@
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/cron/markets-update",
+      "path": "/api/cron/markets",
       "schedule": "0 6 * * *"
     }
   ]

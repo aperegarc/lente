@@ -49,12 +49,18 @@
 
       <!-- ============ HOY / FEED ============ -->
       <section class="screen active" id="screen-today">
-        <div class="progress-container" id="progress"></div>
-        <div class="ticker" id="ticker"></div>
-        <div id="feed-list"></div>
-        <footer class="app-legal-bar" role="contentinfo">
-          <p><strong>Aviso legal.</strong> Lente utiliza inteligencia artificial para sintetizar actualidad financiera. La información se ofrece con fines educativos y de agregación de noticias. No constituye asesoramiento financiero, recomendación de inversión ni gestión de instrumentos financieros según la normativa aplicable en España (incl. orientaciones de la CNMV). Consulta siempre fuentes y, si procede, a un profesional autorizado.</p>
-        </footer>
+        <div class="today-chrome">
+          <div class="progress-container" id="progress"></div>
+          <div class="ticker" id="ticker"></div>
+        </div>
+        <div class="feed-scroll" id="feed-scroll">
+          <div id="feed-list"></div>
+          <div class="feed-slide feed-slide--legal">
+            <footer class="app-legal-bar" role="contentinfo">
+              <p><strong>Aviso legal.</strong> Lente utiliza inteligencia artificial para sintetizar actualidad financiera. La información se ofrece con fines educativos y de agregación de noticias. No constituye asesoramiento financiero, recomendación de inversión ni gestión de instrumentos financieros según la normativa aplicable en España (incl. orientaciones de la CNMV). Consulta siempre fuentes y, si procede, a un profesional autorizado.</p>
+            </footer>
+          </div>
+        </div>
       </section>
 
       <!-- ============ MERCADOS ============ -->
@@ -120,7 +126,7 @@
           <div id="chart-page-loading" class="chart-page-loading">Cargando velas…</div>
           <div id="chart-page-error" class="chart-page-error" hidden></div>
           <div id="chart-page-container" class="chart-page-container"></div>
-          <p class="chart-data-foot">Datos: <strong>Finnhub</strong> · Gráfico: Apache ECharts</p>
+          <p class="chart-data-foot">Datos: <strong>Yahoo Finance</strong> (orientativo) · Gráfico: Apache ECharts</p>
         </div>
       </section>
 

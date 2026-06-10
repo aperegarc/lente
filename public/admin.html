@@ -1073,16 +1073,22 @@
         return false;
       }
 
-      // Verificar que es admin
-      // Temporal: permitir cualquier usuario logueado como admin para testing
-      state.isAdmin = true;
+      // Verificar is_admin en profiles (RLS: solo fila propia)
+      const { data: profile, error: profileErr } = await client
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .single();
+
+      state.isAdmin = !profileErr && profile?.is_admin === true;
 
       if (!state.isAdmin) {
         $('login-view').style.display = 'flex';
         $('admin-view').style.display = 'none';
         const status = $('login-status');
         status.className = 'login-status show error';
-        status.textContent = 'Tu usuario no tiene permisos de admin. Contacta con el administrador para activarlos en la base de datos (tabla profiles, campo is_admin).';
+        status.textContent =
+          'Tu usuario no tiene permisos de admin. Contacta con el administrador (profiles.is_admin = true).';
         return false;
       }
 
@@ -1273,7 +1279,7 @@
         <span class="rc-status ${c.status}">${statusLabel(c.status)}</span>
       </div>
       <div class="rc-body">
-        <h3 class="rc-headline">${c.headline}</h3>
+        <h3 class="rc-headline">${escapeHTML(c.headline)}</h3>
         <p class="rc-deck">${escapeHTML(c.deck)}</p>
         <div class="rc-section">Qué ha pasado</div>
         <p class="rc-text">${escapeHTML(c.body)}</p>
@@ -1285,17 +1291,17 @@
       </div>
       <div class="rc-actions">
         ${c.status === 'pending' ? `
-          <button class="btn btn-sm btn-primary" onclick="act('${c.id}','approve')">Aprobar</button>
-          <button class="btn btn-sm" onclick="edit('${c.id}')">Editar</button>
-          <button class="btn btn-sm btn-danger" onclick="act('${c.id}','reject')">Rechazar</button>
+          <button class="btn btn-sm btn-primary" onclick="act('${escapeAttr(c.id)}','approve')">Aprobar</button>
+          <button class="btn btn-sm" onclick="edit('${escapeAttr(c.id)}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="act('${escapeAttr(c.id)}','reject')">Rechazar</button>
         ` : ''}
         ${c.status === 'approved' ? `
-          <button class="btn btn-sm" onclick="edit('${c.id}')">Editar</button>
-          <button class="btn btn-sm btn-danger" onclick="act('${c.id}','reject')">Devolver a rechazada</button>
+          <button class="btn btn-sm" onclick="edit('${escapeAttr(c.id)}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="act('${escapeAttr(c.id)}','reject')">Devolver a rechazada</button>
         ` : ''}
         ${c.status === 'rejected' ? `
-          <button class="btn btn-sm btn-primary" onclick="act('${c.id}','approve')">Recuperar y aprobar</button>
-          <button class="btn btn-sm" onclick="edit('${c.id}')">Editar</button>
+          <button class="btn btn-sm btn-primary" onclick="act('${escapeAttr(c.id)}','approve')">Recuperar y aprobar</button>
+          <button class="btn btn-sm" onclick="edit('${escapeAttr(c.id)}')">Editar</button>
         ` : ''}
         ${c.status === 'published' ? `
           <span style="font-size:11px;color:var(--ink-muted);padding:6px 0;">Visible en el feed público</span>
@@ -1322,9 +1328,16 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        // Pero permitimos <em></em> porque viene del modelo
         .replace(/&lt;em&gt;/g, '<em>')
         .replace(/&lt;\/em&gt;/g, '</em>');
+    }
+
+    function escapeAttr(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;');
     }
 
     // ============ ACCIONES ============
