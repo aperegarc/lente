@@ -1,5 +1,5 @@
-// Fallback solo para desarrollo local sin API (vercel dev usa /api/public-config vía rewrite).
-// NO pongas claves reales aquí — van en .env.local y el servidor las sirve en /config.js
+// Fallback local. En producción la app carga /api/public-config (no este archivo).
+// NO pongas claves reales aquí — van en .env.local / Vercel.
 window.LENTE_CONFIG = {
   SUPABASE_URL: '',
   SUPABASE_ANON_KEY: '',

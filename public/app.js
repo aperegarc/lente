@@ -144,14 +144,22 @@ const isStandalone =
   window.navigator.standalone === true;
 
 function initSupabase() {
-  if (window.supabase && !supabaseClient) {
+  const url = window.LENTE_CONFIG?.SUPABASE_URL;
+  const anon = window.LENTE_CONFIG?.SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    setTimeout(initSupabase, 100);
+    return;
+  }
+  const sdk = window.supabase;
+  if (sdk?.createClient && !supabaseClient) {
     try {
-      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      supabaseClient = sdk.createClient(url, anon);
       supabaseReady = true;
     } catch (err) {
+      console.error('[lente] createClient falló', err);
       setTimeout(initSupabase, 100);
     }
-  } else if (!window.supabase) {
+  } else if (!sdk?.createClient) {
     setTimeout(initSupabase, 100);
   }
 }
@@ -168,7 +176,17 @@ async function waitForSupabase() {
     await new Promise(r => setTimeout(r, 50));
     retries++;
   }
-  if (!supabaseReady) throw new Error('Supabase no se pudo inicializar');
+  if (!supabaseReady) {
+    const missingSdk = !window.supabase?.createClient;
+    const missingCfg = !window.LENTE_CONFIG?.SUPABASE_URL || !window.LENTE_CONFIG?.SUPABASE_ANON_KEY;
+    throw new Error(
+      missingCfg
+        ? 'Config vacía: falta SUPABASE_URL/ANON_KEY en Vercel (/api/public-config)'
+        : missingSdk
+          ? 'SDK Supabase no cargó (/vendor/supabase.js)'
+          : 'Supabase no se pudo inicializar',
+    );
+  }
   return supabaseClient;
 }
 
