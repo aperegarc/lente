@@ -2,10 +2,6 @@
 // Body: { "job": "ingest" | "generate" }
 // Invoca el cron en el mismo proceso (sin fetch a sí mismo → funciona en vercel dev).
 import { requireAdmin, asCronRequest, createJsonRes } from '../_lib/clients.js';
-import ingest from '../../lib/cron/ingest.js';
-import generate from '../../lib/cron/generate.js';
-
-const JOBS = { ingest, generate };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -26,12 +22,24 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Body debe incluir "job": "ingest" | "generate"' });
   }
 
-  const fn = JOBS[job];
-  console.log(`[trigger] ${job} → in-process`);
+  console.log(`[trigger] ${job} → in-process (lazy import)`);
 
   try {
+    const mod =
+      job === 'ingest'
+        ? await import('../../lib/cron/ingest.js')
+        : await import('../../lib/cron/generate.js');
+    const fn = mod.default;
+
+    const cronReq = asCronRequest(req, job);
+    // Admin: RSS solo; generate se dispara en un 2º paso desde la UI
+    if (job === 'ingest') {
+      cronReq.query = { ...cronReq.query, skipGenerate: '1' };
+      cronReq.headers = { ...cronReq.headers, 'x-lente-skip-generate': '1' };
+    }
+
     const { res: cronRes, out } = createJsonRes();
-    await fn(asCronRequest(req, job), cronRes);
+    await fn(cronReq, cronRes);
     console.log(`[trigger] ${job} (${out.statusCode}):`, out.body);
 
     if (out.statusCode >= 400) {

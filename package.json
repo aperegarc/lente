@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "node dev.js",
+    "admin:login": "node scripts/admin-login-link.js",
+    "admin:password": "node scripts/reset-admin-password.js",
     "deploy": "vercel --prod"
   },
   "dependencies": {

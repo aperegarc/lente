@@ -903,7 +903,7 @@
           </svg>
           <span>Disparar ingestión</span>
         </a>
-        <a class="nav-item" onclick="clearClientCache()">
+        <a class="nav-item" onclick="triggerClearClientCache()">
           <svg viewBox="0 0 24 24">
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
             <path d="M3 3v5h5" />
@@ -1064,7 +1064,18 @@
       if (!window.LENTE_CONFIG) throw new Error('Falta window.LENTE_CONFIG (config.js no cargado)');
       if (!window.supabase?.createClient) throw new Error('SDK de Supabase no cargado');
       const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.LENTE_CONFIG;
-      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Config vacía: SUPABASE_URL / ANON_KEY. ¿Está corriendo npm run dev?');
+      }
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          // pkce: mejor para password + magic link en local
+          flowType: 'pkce',
+        },
+      });
       return supabaseClient;
     }
 
@@ -1253,29 +1264,35 @@
       }
       if (!password || password.length < 6) {
         status.className = 'login-status show error';
-        status.textContent = 'Introduce una contraseña válida';
+        status.textContent = 'Introduce una contraseña válida (mín. 6)';
         return;
       }
 
       status.className = 'login-status show';
       status.textContent = 'Iniciando sesión...';
 
-      const { error } = await client.auth.signInWithPassword({ email, password });
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
       if (error) {
         status.className = 'login-status show error';
         const msg = String(error.message || '');
         if (/invalid login credentials/i.test(msg) || error.status === 400) {
           status.textContent =
-            'Email o contraseña incorrectos (o esta cuenta solo tiene magic link). Usa «Enviar enlace mágico» o «Recuperar contraseña».';
+            'Email o contraseña incorrectos. Prueba de nuevo o usa «Enviar enlace de acceso». Si acabas de resetear la pass, haz Ctrl+F5.';
         } else {
           status.textContent = msg;
         }
         return;
       }
 
+      state.session = data.session;
       status.className = 'login-status show success';
       status.textContent = 'Sesión iniciada. Verificando permisos de admin...';
-      await checkSession();
+      const ok = await checkSession();
+      if (!ok) {
+        status.className = 'login-status show error';
+        status.textContent =
+          'Login OK pero sin is_admin. En Supabase → profiles marca is_admin = true para este email.';
+      }
     }
 
     async function logout() {
@@ -1558,100 +1575,167 @@
       }
     }
 
+    async function parseApiResponse(res) {
+      const text = await res.text();
+      let data = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 160);
+          throw new Error(
+            res.status === 404
+              ? `Endpoint no encontrado (${res.url || res.status})`
+              : `El servidor devolvió HTML/texto en vez de JSON (${res.status}): ${snippet}`,
+          );
+        }
+      }
+      if (!res.ok) {
+        throw new Error(data?.error || data?.details || `Error HTTP ${res.status}`);
+      }
+      return data || {};
+    }
+
     async function clearClientCache() {
-  if (!confirm('¿Forzar actualización en todos los dispositivos conectados?')) return;
-  toast('Enviando señal de actualización...');
-  try {
-    const token = state.session.access_token;
-    const res = await fetch('/api/admin/clear-cache', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(await res.text());
-    toast('Señal enviada ✓ — los clientes actualizarán al cargar');
-  } catch (err) {
-    toast('Error: ' + err.message);
-  }
-}
+      if (!confirm('¿Forzar actualización en todos los dispositivos conectados?')) return;
+      toast('Enviando señal de actualización...');
+      try {
+        const token = state.session?.access_token;
+        if (!token) throw new Error('Sin sesión activa');
+        const res = await fetch('/api/admin/clear-cache', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        await parseApiResponse(res);
+        if (navigator.serviceWorker?.controller) {
+          navigator.serviceWorker.controller.postMessage('CLEAR_CACHE');
+        }
+        toast('Señal enviada ✓ — los clientes actualizarán al cargar', 4000);
+      } catch (err) {
+        console.error('[clearClientCache]', err);
+        toast('Error: ' + err.message, 5000);
+      }
+    }
 
     // ============ CRON TRIGGERS ============
 
-    async function triggerIngest() {
-      if (!confirm('¿Ejecutar ingestión RSS ahora? Esto traerá noticias nuevas y después generará tarjetas automáticamente (tarda 1-3 min).')) return;
-      toast('Ingestión en curso… (RSS + Claude, 1-3 min)', 60000);
+    async function ensureAdminToken() {
+      let token = state.session?.access_token;
+      if (!token) throw new Error('Sin sesión activa — vuelve a iniciar sesión');
       try {
         const client = getSupabaseClient();
-        const { data, error } = await client.auth.refreshSession();
-        if (error) {
-          console.error('Refresh error:', error);
-          throw new Error('Sesión expirada: ' + error.message);
+        const refresh = client.auth.refreshSession();
+        const timed = new Promise((resolve) => {
+          setTimeout(() => resolve({ data: null, error: { message: 'refresh-timeout' } }), 6000);
+        });
+        const { data, error } = await Promise.race([refresh, timed]);
+        if (!error && data?.session?.access_token) {
+          state.session = data.session;
+          token = data.session.access_token;
         }
-        if (!data?.session?.access_token) throw new Error('Sin sesión activa');
-        state.session = data.session;
+      } catch (err) {
+        console.warn('[admin] refreshSession skip:', err.message);
+      }
+      return token;
+    }
 
-        const res = await fetch('/api/admin/trigger', {
+    async function runTriggerIngest() {
+      if (!confirm('¿Ejecutar ingestión RSS ahora? Luego generará tarjetas con Claude.')) return;
+
+      // Toast YA — si refresh/API tardan, el usuario ve actividad
+      toast('1/2 Descargando RSS…', 180000);
+      console.log('[admin] ingest start');
+
+      try {
+        const token = await ensureAdminToken();
+
+        const resIngest = await fetch('/api/admin/trigger', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${state.session.access_token}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ job: 'ingest' }),
         });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok || payload.ok === false) {
-          throw new Error(payload.error || payload.result?.error || JSON.stringify(payload) || `HTTP ${res.status}`);
+        console.log('[admin] ingest HTTP', resIngest.status);
+        const ingestPayload = await parseApiResponse(resIngest);
+        if (ingestPayload.ok === false) {
+          throw new Error(ingestPayload.error || 'Ingestión fallida');
         }
-        const r = payload.result || {};
-        const nArt = r.articles_new ?? '?';
-        const nSrc = r.sources_processed ?? '?';
-        const nCards = r.generate?.cards_generated ?? r.generate?.cards?.length;
-        toast(
-          `Listo: ${nSrc} fuentes, ${nArt} artículos nuevos` +
-            (nCards != null ? `, ${nCards} tarjetas` : ''),
-          5000,
-        );
+        const r = ingestPayload.result || {};
+        const nArt = r.articles_new ?? 0;
+        const nSrc = r.sources_processed ?? 0;
+        const nErr = Array.isArray(r.errors) ? r.errors.length : 0;
+        toast(`RSS listo: ${nSrc} fuentes, ${nArt} nuevos${nErr ? `, ${nErr} con error` : ''}. Generando…`, 180000);
+        console.log('[admin] ingest ok', r);
+
+        toast('2/2 Generando tarjetas con Claude…', 180000);
+        const resGen = await fetch('/api/admin/trigger', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ job: 'generate' }),
+        });
+        console.log('[admin] generate HTTP', resGen.status);
+        const genPayload = await parseApiResponse(resGen);
+        if (genPayload.ok === false) {
+          throw new Error(genPayload.error || genPayload.result?.error || 'Generación fallida');
+        }
+        const nCards = genPayload.result?.cards_generated ?? genPayload.result?.cards?.length ?? 0;
+        toast(`Listo: ${nArt} artículos, ${nCards} tarjetas en pendientes`, 6000);
+
         state.currentStatus = 'pending';
         document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'));
         document.querySelector('.nav-item[data-status="pending"]')?.classList.add('active');
         await loadCards();
       } catch (err) {
         console.error('[triggerIngest]', err);
-        toast('Error: ' + err.message, 5000);
+        toast('Error: ' + err.message, 8000);
       }
     }
 
-    async function triggerGenerate() {
+    async function runTriggerGenerate() {
       if (!confirm('¿Generar tarjetas ahora con las noticias ya ingresadas?')) return;
-      toast('Generando tarjetas con Claude…', 60000);
+      toast('Generando tarjetas con Claude…', 180000);
+      console.log('[admin] generate start');
       try {
-        const client = getSupabaseClient();
-        const { data, error } = await client.auth.refreshSession();
-        if (error) throw new Error('Sesión expirada: ' + error.message);
-        if (!data?.session?.access_token) throw new Error('Sin sesión activa');
-        state.session = data.session;
-
+        const token = await ensureAdminToken();
         const res = await fetch('/api/admin/trigger', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${state.session.access_token}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ job: 'generate' }),
         });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok || payload.ok === false) {
-          throw new Error(payload.error || payload.result?.error || JSON.stringify(payload) || `HTTP ${res.status}`);
+        const payload = await parseApiResponse(res);
+        if (payload.ok === false) {
+          throw new Error(payload.error || payload.result?.error || 'Generación fallida');
         }
         const nCards = payload.result?.cards_generated ?? payload.result?.cards?.length ?? 0;
-        toast(`Generación listo: ${nCards} tarjetas en pendientes`, 4000);
+        toast(`Generación listo: ${nCards} tarjetas en pendientes`, 5000);
         state.currentStatus = 'pending';
         document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'));
         document.querySelector('.nav-item[data-status="pending"]')?.classList.add('active');
         await loadCards();
       } catch (err) {
         console.error('[triggerGenerate]', err);
-        toast('Error: ' + err.message, 5000);
+        toast('Error: ' + err.message, 8000);
       }
+    }
+
+    function triggerIngest() {
+      console.log('[admin] click ingest');
+      setTimeout(() => { void runTriggerIngest(); }, 0);
+    }
+    function triggerGenerate() {
+      console.log('[admin] click generate');
+      setTimeout(() => { void runTriggerGenerate(); }, 0);
+    }
+    function triggerClearClientCache() {
+      setTimeout(() => { void clearClientCache(); }, 0);
     }
 
     // ============ NAV ============
@@ -1675,6 +1759,8 @@
       window.logout = logout;
       window.triggerIngest = triggerIngest;
       window.triggerGenerate = triggerGenerate;
+      window.triggerClearClientCache = triggerClearClientCache;
+      window.clearClientCache = triggerClearClientCache;
       window.closeEdit = closeEdit;
       window.saveEdit = saveEdit;
       window.edit = edit;
