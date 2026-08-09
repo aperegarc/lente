@@ -594,6 +594,31 @@
       margin-bottom: 22px;
     }
 
+    .admin-link-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .login-card.recovery-active .hide-on-recovery {
+      display: none !important;
+    }
+
+    #admin-recovery-panel {
+      display: none;
+    }
+
+    .login-card.recovery-active #admin-recovery-panel {
+      display: block !important;
+    }
+
     .field {
       margin-bottom: 16px;
     }
@@ -1062,6 +1087,71 @@
 
     // ============ AUTH ============
 
+    function setAdminRecoveryActive(on, email) {
+      const card = document.querySelector('#login-view .login-card');
+      if (card) card.classList.toggle('recovery-active', !!on);
+      const em = $('admin-recovery-email');
+      if (em && email) em.textContent = email;
+      if (!on) {
+        if ($('admin-recovery-p1')) $('admin-recovery-p1').value = '';
+        if ($('admin-recovery-p2')) $('admin-recovery-p2').value = '';
+      }
+    }
+
+    async function sendPasswordRecovery() {
+      const client = getSupabaseClient();
+      const email = $('login-email').value.trim();
+      const status = $('login-status');
+      if (!email.includes('@')) {
+        status.className = 'login-status show error';
+        status.textContent = 'Introduce un email válido en el campo de arriba';
+        return;
+      }
+      status.className = 'login-status show';
+      status.textContent = 'Enviando enlace...';
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo: `${location.origin}/admin`,
+      });
+      if (error) {
+        status.className = 'login-status show error';
+        status.textContent = error.message;
+        return;
+      }
+      status.className = 'login-status show success';
+      status.textContent =
+        'Si existe una cuenta con ese email, recibirás un enlace para restablecer la contraseña. Revisa spam.';
+    }
+
+    async function submitAdminRecoveryPassword() {
+      const client = getSupabaseClient();
+      const p1 = $('admin-recovery-p1').value;
+      const p2 = $('admin-recovery-p2').value;
+      const status = $('login-status');
+      if (!p1 || p1.length < 6) {
+        status.className = 'login-status show error';
+        status.textContent = 'Mínimo 6 caracteres';
+        return;
+      }
+      if (p1 !== p2) {
+        status.className = 'login-status show error';
+        status.textContent = 'Las contraseñas no coinciden';
+        return;
+      }
+      status.className = 'login-status show';
+      status.textContent = 'Guardando...';
+      const { error } = await client.auth.updateUser({ password: p1 });
+      if (error) {
+        status.className = 'login-status show error';
+        status.textContent = error.message;
+        return;
+      }
+      setAdminRecoveryActive(false);
+      status.className = 'login-status show success';
+      status.textContent = 'Contraseña actualizada.';
+      toast('Contraseña guardada');
+      await checkSession();
+    }
+
     async function checkSession() {
       const client = getSupabaseClient();
       const { data: { session } } = await client.auth.getSession();
@@ -1073,14 +1163,35 @@
         return false;
       }
 
-      // Verificar is_admin en profiles (RLS: solo fila propia)
-      const { data: profile, error: profileErr } = await client
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', session.user.id)
-        .single();
+      if (document.querySelector('#login-view .login-card')?.classList.contains('recovery-active')) {
+        $('login-view').style.display = 'flex';
+        $('admin-view').style.display = 'none';
+        return false;
+      }
 
-      state.isAdmin = !profileErr && profile?.is_admin === true;
+      // Verificar admin en servidor (service_role), no solo vía RLS del cliente
+      let isAdmin = false;
+      try {
+        const res = await fetch('/api/admin/me', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        isAdmin = res.ok && data.is_admin === true;
+      } catch (err) {
+        console.error('[admin] /api/admin/me', err);
+      }
+
+      // Fallback: lectura directa del perfil (por si la API falla en un entorno raro)
+      if (!isAdmin) {
+        const { data: profile, error: profileErr } = await client
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', session.user.id)
+          .single();
+        isAdmin = !profileErr && profile?.is_admin === true;
+      }
+
+      state.isAdmin = isAdmin;
 
       if (!state.isAdmin) {
         $('login-view').style.display = 'flex';
@@ -1088,7 +1199,7 @@
         const status = $('login-status');
         status.className = 'login-status show error';
         status.textContent =
-          'Tu usuario no tiene permisos de admin. Contacta con el administrador (profiles.is_admin = true).';
+          `Sesión de ${session.user.email || 'usuario'} sin is_admin. En Supabase → profiles marca is_admin = true para ese email. En local usa contraseña o añade http://localhost:3000/** en Redirect URLs.`;
         return false;
       }
 
@@ -1100,6 +1211,7 @@
 
     async function sendMagicLink() {
       const client = getSupabaseClient();
+      setAdminRecoveryActive(false);
       const email = $('login-email').value.trim();
       const status = $('login-status');
 
@@ -1129,6 +1241,7 @@
 
     async function signInWithPassword() {
       const client = getSupabaseClient();
+      setAdminRecoveryActive(false);
       const email = $('login-email').value.trim();
       const password = $('login-password').value;
       const status = $('login-status');
@@ -1150,7 +1263,13 @@
       const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) {
         status.className = 'login-status show error';
-        status.textContent = error.message;
+        const msg = String(error.message || '');
+        if (/invalid login credentials/i.test(msg) || error.status === 400) {
+          status.textContent =
+            'Email o contraseña incorrectos (o esta cuenta solo tiene magic link). Usa «Enviar enlace mágico» o «Recuperar contraseña».';
+        } else {
+          status.textContent = msg;
+        }
         return;
       }
 
@@ -1168,10 +1287,19 @@
     function initAuthListeners() {
       try {
         const client = getSupabaseClient();
-        client.auth.onAuthStateChange(() => {
-          checkSession().then(ok => {
-            if (ok) loadCards();
-          });
+        client.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'PASSWORD_RECOVERY') {
+            state.session = session;
+            $('login-view').style.display = 'flex';
+            $('admin-view').style.display = 'none';
+            setAdminRecoveryActive(true, session?.user?.email || '');
+            const status = $('login-status');
+            status.className = 'login-status show';
+            status.textContent = 'Elige una contraseña nueva y pulsa Guardar.';
+            return;
+          }
+          const ok = await checkSession();
+          if (ok) loadCards();
         });
       } catch (err) {
         const status = $('login-status');
@@ -1450,58 +1578,79 @@
 
     async function triggerIngest() {
       if (!confirm('¿Ejecutar ingestión RSS ahora? Esto traerá noticias nuevas y después generará tarjetas automáticamente (tarda 1-3 min).')) return;
-      toast('Disparando ingestión...');
+      toast('Ingestión en curso… (RSS + Claude, 1-3 min)', 60000);
       try {
-        // Refrescar sesión para asegurar token válido
         const client = getSupabaseClient();
         const { data, error } = await client.auth.refreshSession();
         if (error) {
           console.error('Refresh error:', error);
           throw new Error('Sesión expirada: ' + error.message);
         }
+        if (!data?.session?.access_token) throw new Error('Sin sesión activa');
         state.session = data.session;
-        console.log('New token:', state.session.access_token.substring(0, 20) + '...');
 
-        const token = state.session.access_token;
         const res = await fetch('/api/admin/trigger', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${state.session.access_token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ job: 'ingest' }),
         });
-        if (!res.ok) throw new Error(await res.text());
-        toast('Ingestión iniciada. Revisa "Pendientes" en 1-3 min.');
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || payload.ok === false) {
+          throw new Error(payload.error || payload.result?.error || JSON.stringify(payload) || `HTTP ${res.status}`);
+        }
+        const r = payload.result || {};
+        const nArt = r.articles_new ?? '?';
+        const nSrc = r.sources_processed ?? '?';
+        const nCards = r.generate?.cards_generated ?? r.generate?.cards?.length;
+        toast(
+          `Listo: ${nSrc} fuentes, ${nArt} artículos nuevos` +
+            (nCards != null ? `, ${nCards} tarjetas` : ''),
+          5000,
+        );
+        state.currentStatus = 'pending';
+        document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'));
+        document.querySelector('.nav-item[data-status="pending"]')?.classList.add('active');
+        await loadCards();
       } catch (err) {
-        toast('Error: ' + err.message);
+        console.error('[triggerIngest]', err);
+        toast('Error: ' + err.message, 5000);
       }
     }
 
     async function triggerGenerate() {
       if (!confirm('¿Generar tarjetas ahora con las noticias ya ingresadas?')) return;
-      toast('Generando tarjetas...');
+      toast('Generando tarjetas con Claude…', 60000);
       try {
-        // Refrescar sesión para asegurar token válido
         const client = getSupabaseClient();
         const { data, error } = await client.auth.refreshSession();
         if (error) throw new Error('Sesión expirada: ' + error.message);
+        if (!data?.session?.access_token) throw new Error('Sin sesión activa');
         state.session = data.session;
 
-        const token = state.session.access_token;
         const res = await fetch('/api/admin/trigger', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${state.session.access_token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ job: 'generate' }),
         });
-        if (!res.ok) throw new Error(await res.text());
-        toast('Generación iniciada');
-        setTimeout(loadCards, 30000);  // recarga en 30s
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || payload.ok === false) {
+          throw new Error(payload.error || payload.result?.error || JSON.stringify(payload) || `HTTP ${res.status}`);
+        }
+        const nCards = payload.result?.cards_generated ?? payload.result?.cards?.length ?? 0;
+        toast(`Generación listo: ${nCards} tarjetas en pendientes`, 4000);
+        state.currentStatus = 'pending';
+        document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'));
+        document.querySelector('.nav-item[data-status="pending"]')?.classList.add('active');
+        await loadCards();
       } catch (err) {
-        toast('Error: ' + err.message);
+        console.error('[triggerGenerate]', err);
+        toast('Error: ' + err.message, 5000);
       }
     }
 
@@ -1519,6 +1668,8 @@
     // ============ INIT ============
 
     (async () => {
+      window.sendPasswordRecovery = sendPasswordRecovery;
+      window.submitAdminRecoveryPassword = submitAdminRecoveryPassword;
       window.sendMagicLink = sendMagicLink;
       window.signInWithPassword = signInWithPassword;
       window.logout = logout;

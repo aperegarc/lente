@@ -92,6 +92,41 @@ function coerceLoopbackToHttp(baseUrl) {
   return baseUrl.replace(/\/$/, '');
 }
 
+/**
+ * Request sintético con Bearer CRON_SECRET para invocar jobs en el mismo proceso
+ * (evita deadlocks de fetch→self en `vercel dev`).
+ */
+export function asCronRequest(req, job) {
+  return {
+    method: 'GET',
+    query: { ...(req?.query || {}), job },
+    headers: {
+      ...(req?.headers || {}),
+      authorization: `Bearer ${process.env.CRON_SECRET}`,
+      'x-lente-internal-trigger': '1',
+    },
+  };
+}
+
+/** Response falsa que captura status + JSON (para run in-process). */
+export function createJsonRes() {
+  const out = { statusCode: 200, body: null };
+  const res = {
+    status(code) {
+      out.statusCode = code;
+      return res;
+    },
+    json(body) {
+      out.body = body;
+      return res;
+    },
+    setHeader() {
+      return res;
+    },
+  };
+  return { res, out };
+}
+
 /** Origen HTTP(S) para llamadas server→server (triggers → cron). */
 export function getDeploymentUrl(req) {
   let base;

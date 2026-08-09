@@ -1,6 +1,11 @@
 // POST /api/admin/trigger
 // Body: { "job": "ingest" | "generate" }
-import { requireAdmin, getDeploymentUrl } from '../_lib/clients.js';
+// Invoca el cron en el mismo proceso (sin fetch a sí mismo → funciona en vercel dev).
+import { requireAdmin, asCronRequest, createJsonRes } from '../_lib/clients.js';
+import ingest from '../../lib/cron/ingest.js';
+import generate from '../../lib/cron/generate.js';
+
+const JOBS = { ingest, generate };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -21,20 +26,24 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Body debe incluir "job": "ingest" | "generate"' });
   }
 
-  const path = job === 'ingest' ? '/api/crons?job=ingest' : '/api/crons?job=generate';
-  const url = `${getDeploymentUrl(req)}${path}`;
-  console.log(`[trigger] ${job} →`, url);
+  const fn = JOBS[job];
+  console.log(`[trigger] ${job} → in-process`);
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        authorization: `Bearer ${process.env.CRON_SECRET}`,
-        'x-lente-internal-trigger': '1',
-      },
-    });
-    const data = await response.json();
-    console.log(`[trigger] ${job} (${response.status}):`, data);
-    return res.status(200).json({ ok: true, triggered: job, result: data });
+    const { res: cronRes, out } = createJsonRes();
+    await fn(asCronRequest(req, job), cronRes);
+    console.log(`[trigger] ${job} (${out.statusCode}):`, out.body);
+
+    if (out.statusCode >= 400) {
+      return res.status(out.statusCode).json({
+        ok: false,
+        triggered: job,
+        error: out.body?.error || `Job ${job} falló`,
+        result: out.body,
+      });
+    }
+
+    return res.status(200).json({ ok: true, triggered: job, result: out.body });
   } catch (err) {
     console.error(`[trigger] ${job}:`, err.message);
     return res.status(500).json({ error: err.message });
