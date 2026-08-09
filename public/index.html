@@ -120,7 +120,7 @@
           <div id="chart-page-loading" class="chart-page-loading">Cargando velas…</div>
           <div id="chart-page-error" class="chart-page-error" hidden></div>
           <div id="chart-page-container" class="chart-page-container"></div>
-          <p class="chart-data-foot">Datos: <strong>Finnhub</strong> · Gráfico: Apache ECharts</p>
+          <p class="chart-data-foot">Datos: <strong>Yahoo Finance</strong> (orientativo) · Gráfico: Apache ECharts</p>
         </div>
       </section>
 
@@ -176,12 +176,41 @@
           <label class="field-label">Email</label>
           <input type="email" id="login-email" placeholder="tu@email.com" />
         </div>
-        <div class="field">
+        <div class="field" id="login-password-field">
           <label class="field-label">Contraseña</label>
-          <input type="password" id="login-password" placeholder="••••••••" />
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
         </div>
+        <p class="login-forgot-row" id="login-forgot-row" style="margin:0 0 14px;font-size:13px;">
+          <button type="button" class="link-text-btn" id="login-forgot-btn" onclick="showForgotPassword()">¿Olvidaste tu contraseña?</button>
+        </p>
+        <p class="login-forgot-row" id="login-back-from-forgot" style="display:none;margin:0 0 14px;font-size:13px;">
+          <button type="button" class="link-text-btn" onclick="showTab('login')">Volver a iniciar sesión</button>
+        </p>
         <button class="cta" id="login-submit-btn" onclick="submitLogin()" style="width:100%;">Entrar</button>
         <p id="login-status" class="login-status"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal recuperación: enlace del email (PASSWORD_RECOVERY) -->
+  <div class="modal-bg" id="recovery-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">Nueva contraseña</div>
+        <button type="button" class="icon-btn" onclick="closeRecoveryModal()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--ink-dim);line-height:1.45;margin:0 0 16px;">Elige una contraseña nueva. Tras guardar podrás usarla para entrar.</p>
+        <div class="field">
+          <label class="field-label">Nueva contraseña</label>
+          <input type="password" id="recovery-password" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label class="field-label">Confirmar</label>
+          <input type="password" id="recovery-password-2" placeholder="Repite la contraseña" autocomplete="new-password" />
+        </div>
+        <button type="button" class="cta" onclick="submitNewPassword()" style="width:100%;">Guardar contraseña</button>
+        <p id="recovery-status" class="login-status" style="margin-top:12px;"></p>
       </div>
     </div>
   </div>

@@ -1,29 +1,34 @@
 // ============================================================
-// /api/candles.js — velas solo desde Finnhub (clave en servidor)
-// GET ?symbol=...&resolution=60&from=<unix>&to=<unix>
-// Endpoints Finnhub: /stock/candle | /crypto/candle | /forex/candle
+// /api/candles.js — velas OHLCV vía API pública Yahoo Finance v8
+// GET ?symbol=...&resolution=15|60|D&from=<unix>&to=<unix>
 // ============================================================
 
-const FINNHUB = 'https://finnhub.io/api/v1';
+const YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
-/** Símbolo de URL (p. ej. BINANCE:BTCUSDT, NASDAQ:AAPL) → tipo + símbolo Finnhub */
-function resolveSymbol(symbol) {
-  const s = String(symbol || '').trim();
+/** Símbolo estilo TradingView / app → ticker Yahoo */
+function resolveYahooSymbol(tvSymbol) {
+  const s = String(tvSymbol || '').trim();
   if (!s) return null;
 
   if (/^BINANCE:/i.test(s) || /^COINBASE:/i.test(s) || /^KRAKEN:/i.test(s) || /^CRYPTO:/i.test(s)) {
-    return { type: 'crypto', finnhubSymbol: s };
+    const raw = (s.split(':')[1] || '').trim();
+    if (/USDT$/i.test(raw)) {
+      const base = raw.replace(/USDT$/i, '');
+      return `${base}-USD`;
+    }
+    if (/-USD$/i.test(raw)) return raw;
+    return raw.includes('-') ? raw : `${raw}-USD`;
   }
 
   const fxMap = {
-    'FX:EURUSD': 'OANDA:EUR_USD',
-    'FX:GBPUSD': 'OANDA:GBP_USD',
-    'FX:USDJPY': 'OANDA:USD_JPY',
-    'FX:USDCHF': 'OANDA:USD_CHF',
-    'FX:AUDUSD': 'OANDA:AUD_USD',
-    'FX:USDCAD': 'OANDA:USD_CAD',
+    'FX:EURUSD': 'EURUSD=X',
+    'FX:GBPUSD': 'GBPUSD=X',
+    'FX:USDJPY': 'JPY=X',
+    'FX:USDCHF': 'CHF=X',
+    'FX:AUDUSD': 'AUDUSD=X',
+    'FX:USDCAD': 'CAD=X',
   };
-  if (fxMap[s]) return { type: 'forex', finnhubSymbol: fxMap[s] };
+  if (fxMap[s]) return fxMap[s];
 
   const idxMap = {
     'IBEX:IBEX': '^IBEX',
@@ -31,23 +36,28 @@ function resolveSymbol(symbol) {
     'NASDAQ:CCMP': '^IXIC',
     'STOXX:STOXX50E': '^STOXX50E',
   };
-  if (idxMap[s]) return { type: 'stock', finnhubSymbol: idxMap[s] };
+  if (idxMap[s]) return idxMap[s];
 
   const bme = s.match(/^(BME|XMAD):(.+)$/i);
-  if (bme) return { type: 'stock', finnhubSymbol: `${bme[2].toUpperCase()}.MC` };
+  if (bme) return `${bme[2].toUpperCase()}.MC`;
 
   if (s.includes(':')) {
     const tick = s.split(':').pop();
-    return { type: 'stock', finnhubSymbol: tick || s };
+    return tick || s;
   }
 
-  return { type: 'stock', finnhubSymbol: s };
+  return s;
 }
 
-function finnhubCandlePath(type) {
-  if (type === 'crypto') return '/crypto/candle';
-  if (type === 'forex') return '/forex/candle';
-  return '/stock/candle';
+function mapResolutionToYahooInterval(resolution) {
+  const r = String(resolution || '60');
+  if (r === 'D' || r === '1D') return '1d';
+  if (r === '60' || r === '1h') return '1h';
+  if (r === '30') return '30m';
+  if (r === '15') return '15m';
+  if (r === '5') return '5m';
+  if (r === '1') return '1m';
+  return '15m';
 }
 
 export default async function handler(req, res) {
@@ -56,11 +66,6 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Método no permitido' });
-  }
-
-  const key = (process.env.FINNHUB_API_KEY || '').trim();
-  if (!key) {
-    return res.status(503).json({ error: 'Finnhub no configurado (FINNHUB_API_KEY)' });
   }
 
   let symbol = req.query.symbol;
@@ -81,85 +86,103 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Rango from/to inválido' });
   }
 
-  const resolved = resolveSymbol(symbol);
-  if (!resolved) return res.status(400).json({ error: 'Símbolo inválido' });
+  const yahooSym = resolveYahooSymbol(symbol);
+  if (!yahooSym) return res.status(400).json({ error: 'Símbolo inválido' });
 
   const fromI = Math.floor(from);
   const toI = Math.floor(to);
-  const path = finnhubCandlePath(resolved.type);
-  const url = `${FINNHUB}${path}?symbol=${encodeURIComponent(resolved.finnhubSymbol)}&resolution=${encodeURIComponent(resolution)}&from=${fromI}&to=${toI}&token=${key}`;
+  const interval = mapResolutionToYahooInterval(resolution);
+
+  const url = `${YAHOO_CHART}/${encodeURIComponent(yahooSym)}?period1=${fromI}&period2=${toI}&interval=${encodeURIComponent(interval)}`;
 
   let r;
   try {
-    r = await fetch(url);
+    r = await fetch(url, {
+      headers: { 'User-Agent': 'lente-candles/1.0 (educational; serverless)' },
+    });
   } catch (e) {
-    return res.status(502).json({ error: 'Red Finnhub', detail: e.message });
+    return res.status(502).json({ error: 'Red Yahoo Finance', detail: e.message });
   }
 
-  const text = await r.text();
-  let data;
+  let j;
   try {
-    data = JSON.parse(text);
+    j = await r.json();
   } catch {
-    data = null;
+    return res.status(502).json({ error: 'Respuesta Yahoo no JSON' });
   }
 
   if (!r.ok) {
-    const finMsg = data?.error || text?.slice(0, 280) || '';
-    const accessDenied = r.status === 403 || r.status === 401;
-    let hint;
-    if (accessDenied) {
-      if (resolved.type === 'crypto') {
-        hint =
-          'Finnhub: el endpoint /crypto/candle no está incluido en tu plan (mensaje típico en gratuito). Activa el add-on Crypto o un plan que lo cubra; mientras tanto prueba un gráfico de acción o índice (/stock/candle).';
-      } else {
-        hint =
-          'Revisa que FINNHUB_API_KEY sea la de tu cuenta y que el plan incluya velas para este tipo de activo (stock/forex).';
-      }
-    }
     return res.status(502).json({
-      error: 'Finnhub rechazó la petición',
+      error: 'Yahoo Finance rechazó la petición',
       httpStatus: r.status,
-      detail: finMsg || `HTTP ${r.status}`,
-      hint,
+      detail: j?.chart?.error?.description || `HTTP ${r.status}`,
     });
   }
 
-  if (data.s === 'no_data' || !Array.isArray(data.t) || data.t.length === 0) {
+  const result = j.chart?.result?.[0];
+  const err = j.chart?.error;
+  if (err) {
+    return res.status(200).json({
+      ok: false,
+      status: 'error',
+      candles: [],
+      symbol: yahooSym,
+      source: 'yahoo',
+      detail: err.description || String(err),
+    });
+  }
+
+  if (!result) {
     return res.status(200).json({
       ok: true,
       status: 'no_data',
       candles: [],
-      type: resolved.type,
-      symbol: resolved.finnhubSymbol,
+      symbol: yahooSym,
+      source: 'yahoo',
     });
   }
 
-  if (data.s !== 'ok') {
+  const ts = result.timestamp || [];
+  const q = result.indicators?.quote?.[0] || {};
+  const opens = q.open || [];
+  const highs = q.high || [];
+  const lows = q.low || [];
+  const closes = q.close || [];
+  const vols = q.volume || [];
+
+  const candles = [];
+  for (let i = 0; i < ts.length; i++) {
+    const o = opens[i];
+    const h = highs[i];
+    const l = lows[i];
+    const c = closes[i];
+    if (o == null && h == null && l == null && c == null) continue;
+    if (c == null && o == null) continue;
+    candles.push({
+      time: ts[i],
+      open: o != null ? +o : +c,
+      high: h != null ? +h : Math.max(+(o || c), +(c || o)),
+      low: l != null ? +l : Math.min(+(o || c), +(c || o)),
+      close: c != null ? +c : +o,
+      volume: vols[i] != null && !Number.isNaN(+vols[i]) ? +vols[i] : null,
+    });
+  }
+
+  if (candles.length === 0) {
     return res.status(200).json({
-      ok: false,
-      status: data.s || 'error',
+      ok: true,
+      status: 'no_data',
       candles: [],
-      type: resolved.type,
-      symbol: resolved.finnhubSymbol,
+      symbol: yahooSym,
+      source: 'yahoo',
     });
   }
-
-  const candles = data.t.map((t, i) => ({
-    time: t,
-    open: data.o[i],
-    high: data.h[i],
-    low: data.l[i],
-    close: data.c[i],
-    volume: Array.isArray(data.v) && data.v[i] != null ? data.v[i] : null,
-  }));
 
   return res.status(200).json({
     ok: true,
     status: 'ok',
     candles,
-    type: resolved.type,
-    symbol: resolved.finnhubSymbol,
-    source: 'finnhub',
+    symbol: yahooSym,
+    source: 'yahoo',
   });
 }

@@ -49,12 +49,8 @@ export default async function handler(req, res) {
     checks.vars.OPENAI_API_KEY = '○ no usada por generate.js (solo Claude)';
   }
 
-  const fh = process.env.FINNHUB_API_KEY;
-  if (fh && !fh.includes('...') && fh.length >= 8) {
-    checks.vars.FINNHUB_API_KEY = `○ ingest (${fh.slice(0, 6)}...)`;
-  } else {
-    checks.vars.FINNHUB_API_KEY = '○ sin configurar (solo RSS)';
-  }
+  checks.vars.FINNHUB_API_KEY =
+    '○ no usada (Finnhub retirado; velas Yahoo, mercados Yahoo/RSS sources)';
 
   const sk = getStripeSecretKey();
   const stripeDx = getStripeSecretKeyDiagnostics();

@@ -214,28 +214,6 @@ async function fetchCoinGeckoSeries(coingeckoId, days) {
   }));
 }
 
-/** Finnhub velas diarias (opcional; requiere FINNHUB_API_KEY en servidor). */
-async function fetchFinnhubDailySeries(symbol, days) {
-  const token = process.env.FINNHUB_API_KEY?.trim();
-  if (!token) return null;
-  let sym = symbol.replace(/\^/, '').replace(/=F$/i, '');
-  if (/-USD$/i.test(symbol) && symbol.split('-')[0]?.length <= 5) {
-    sym = symbol.replace(/-USD$/i, '');
-  }
-  if (!sym || sym.length > 12) return null;
-  const to = Math.floor(Date.now() / 1000);
-  const from = to - Math.min(730, Math.max(7, days)) * 86400;
-  const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(sym)}&resolution=D&from=${from}&to=${to}&token=${token}`;
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!r.ok) return null;
-  const j = await r.json();
-  if (j.s !== 'ok' || !Array.isArray(j.t) || !j.t.length) return null;
-  return j.t.map((ts, i) => ({
-    t: new Date(ts * 1000).toISOString(),
-    v: j.c[i] != null ? +j.c[i] : null,
-  })).filter((p) => p.v != null && !Number.isNaN(p.v));
-}
-
 function pctChangeFromSeries(series) {
   if (!series?.length || series.length < 2) return null;
   const a = series[0].v;
@@ -246,7 +224,7 @@ function pctChangeFromSeries(series) {
 
 /**
  * GET ?series=1&symbol=...&days=30
- * Fuentes: Frankfurter (divisas), CoinGecko (cripto), opcional Finnhub (acciones/índices si hay API key).
+ * Fuentes: Frankfurter (divisas), CoinGecko (cripto), Yahoo (acciones/índices).
  */
 async function buildMarketSeries(symbol, days) {
   const def = MARKETS_UNIVERSE.find((u) => u.symbol === symbol);
@@ -270,7 +248,7 @@ async function buildMarketSeries(symbol, days) {
   let series = [];
   let source = 'none';
   let attribution =
-    'Datos orientativos. Divisas: Frankfurter (tipos ECB). Cripto: CoinGecko.';
+    'Datos orientativos. Divisas: Frankfurter (tipos ECB). Cripto: CoinGecko. Acciones/índices: Yahoo Finance.';
 
   if (def.frankfurterTo) {
     series = await fetchFrankfurterSeries(def.frankfurterTo, range);
@@ -283,20 +261,11 @@ async function buildMarketSeries(symbol, days) {
     attribution =
       'Precios en EUR vía CoinGecko API (uso según términos de CoinGecko).';
   } else {
-    const fh = await fetchFinnhubDailySeries(def.symbol, range);
-    if (fh?.length) {
-      series = fh;
-      source = 'finnhub';
+    series = await fetchYahooV8ChartSeries(def.symbol, range);
+    if (series.length) {
+      source = 'yahoo_v8';
       attribution =
-        'Velas diarias vía Finnhub (opcional; FINNHUB_API_KEY en servidor).';
-    }
-    if (!series.length) {
-      series = await fetchYahooV8ChartSeries(def.symbol, range);
-      if (series.length) {
-        source = 'yahoo_v8';
-        attribution =
-          'Histórico diario vía API pública de gráficos Yahoo Finance (rango aproximado al periodo); uso orientativo.';
-      }
+        'Histórico diario vía API pública de gráficos Yahoo Finance (rango aproximado al periodo); uso orientativo.';
     }
     if (!series.length && def.category === 'acciones') {
       const mc = `${def.symbol.replace(/\./g, '-')}.MC`;

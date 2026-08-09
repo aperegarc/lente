@@ -1,5 +1,5 @@
 // ============================================================
-// /public/app.js — Mercados: datos Finnhub · gráfico Apache ECharts (no TradingView)
+// /public/app.js — Mercados: velas vía /api/candles (Yahoo) · gráfico Apache ECharts
 // Ruta /chart/:symbol (ej. /chart/BINANCE%3ABTCUSDT)
 // ============================================================
 
@@ -44,7 +44,7 @@ function cardAiSourceRowHtml(c) {
   return `<div class="card-ai-row">${parts.join('')}</div>`;
 }
 
-/** Rango y resolución Finnhub por botón de periodo */
+/** Rango y resolución (Yahoo interval) por botón de periodo */
 const CHART_TF = {
   '1D': { rangeSec: 86400, resolution: '15' },
   '1W': { rangeSec: 86400 * 7, resolution: '60' },
@@ -111,7 +111,7 @@ const TRADINGVIEW_MAP = {
   'SI=F': 'COMEX:SI1!',
 };
 
-/** Misma regla que api/candles.js → Finnhub /crypto/candle (suele exigir plan de pago). */
+/** Cripto en formato exchange (p. ej. BINANCE:…) para mensajes de error de velas. */
 function isCryptoChartSymbol(symbol) {
   const s = String(symbol || '').trim();
   return (
@@ -123,7 +123,7 @@ function isCryptoChartSymbol(symbol) {
 }
 
 const CRYPTO_CANDLES_PLAN_MSG =
-  'Las velas de cripto en Finnhub requieren un plan con add-on Crypto. Con el plan gratuito no hay gráfico aquí; prueba una acción o un índice.';
+  'No se pudieron cargar las velas de este activo (Yahoo puede no ofrecer intradía para este símbolo). Prueba otro periodo o un índice/acción líquido.';
 
 let supabaseClient = null;
 let supabaseReady = false;
@@ -614,12 +614,12 @@ async function refreshChartData() {
     if (!data.ok || data.status !== 'ok' || !data.candles?.length) {
       errEl.textContent =
         data.status === 'no_data'
-          ? 'No hay velas para este activo en este periodo (Finnhub).'
+          ? 'No hay velas para este activo en este periodo (Yahoo Finance).'
           : 'No se pudieron obtener las velas.';
       errEl.hidden = false;
       return;
     }
-    await renderFinnhubChart(data.candles);
+    await renderCandleChart(data.candles);
   } catch (e) {
     loading.style.display = 'none';
     errEl.textContent = e.message || 'Error de red';
@@ -627,7 +627,7 @@ async function refreshChartData() {
   }
 }
 
-async function renderFinnhubChart(candles) {
+async function renderCandleChart(candles) {
   await loadEchartsScript();
   const container = $('chart-page-container');
   container.innerHTML = '';
@@ -1333,13 +1333,88 @@ function closeLogin() { $('login-modal')?.classList.remove('open'); }
 function closeProfileModal() { $('profile-modal')?.classList.remove('open'); }
 
 let loginMode = 'login';
+
+function syncLoginModalUi() {
+  const isLogin = loginMode === 'login';
+  const isRegister = loginMode === 'register';
+  const isForgot = loginMode === 'forgot';
+  const tabs = document.querySelector('#login-modal .login-tabs');
+  if (tabs) tabs.style.display = isForgot ? 'none' : 'flex';
+  if ($('tab-login')) {
+    $('tab-login').style.background = isLogin && !isForgot ? '' : 'transparent';
+    $('tab-login').style.color = isLogin && !isForgot ? '' : '#717878';
+  }
+  if ($('tab-register')) {
+    $('tab-register').style.background = isRegister ? '' : 'transparent';
+    $('tab-register').style.color = isRegister ? '' : '#717878';
+  }
+  const passField = $('login-password-field');
+  if (passField) passField.style.display = isForgot ? 'none' : '';
+  const forgotRow = $('login-forgot-row');
+  if (forgotRow) forgotRow.style.display = isLogin && !isForgot ? '' : 'none';
+  const backForgot = $('login-back-from-forgot');
+  if (backForgot) backForgot.style.display = isForgot ? '' : 'none';
+  if ($('login-submit-btn')) {
+    if (isForgot) $('login-submit-btn').textContent = 'Enviar enlace de recuperación';
+    else $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
+  }
+  if ($('login-modal-title')) {
+    if (isForgot) $('login-modal-title').innerHTML = 'Recuperar <em>acceso</em>';
+    else $('login-modal-title').innerHTML = 'Accede a <em>lente</em>';
+  }
+}
+
 function showTab(mode) {
-  loginMode = mode;
-  const isLogin = mode === 'login';
-  if ($('tab-login')) { $('tab-login').style.background = isLogin ? '' : 'transparent'; $('tab-login').style.color = isLogin ? '' : '#717878'; }
-  if ($('tab-register')) { $('tab-register').style.background = isLogin ? 'transparent' : ''; $('tab-register').style.color = isLogin ? '#717878' : ''; }
-  if ($('login-submit-btn')) $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
+  loginMode = mode === 'register' ? 'register' : 'login';
   if ($('login-status')) $('login-status').textContent = '';
+  syncLoginModalUi();
+}
+
+function showForgotPassword() {
+  loginMode = 'forgot';
+  if ($('login-status')) $('login-status').textContent = '';
+  syncLoginModalUi();
+}
+
+function closeRecoveryModal() {
+  $('recovery-modal')?.classList.remove('open');
+  if ($('recovery-password')) $('recovery-password').value = '';
+  if ($('recovery-password-2')) $('recovery-password-2').value = '';
+  if ($('recovery-status')) $('recovery-status').textContent = '';
+}
+
+async function submitNewPassword() {
+  const st = $('recovery-status');
+  const p1 = ($('recovery-password')?.value || '').trim();
+  const p2 = ($('recovery-password-2')?.value || '').trim();
+  if (!p1 || p1.length < 6) {
+    if (st) st.textContent = 'Mínimo 6 caracteres';
+    return;
+  }
+  if (p1 !== p2) {
+    if (st) st.textContent = 'Las contraseñas no coinciden';
+    return;
+  }
+  try {
+    await waitForSupabase();
+    if (st) st.textContent = 'Guardando...';
+    const { error } = await supabaseClient.auth.updateUser({ password: p1 });
+    if (error) {
+      if (st) st.textContent = error.message;
+      return;
+    }
+    closeRecoveryModal();
+    const { data: { session: s } } = await supabaseClient.auth.getSession();
+    state.session = s;
+    if (s?.user?.id) await loadProfile(s.user.id);
+    updateProfileBtn();
+    await loadFeed();
+    renderFeed();
+    toast('Contraseña actualizada. Ya puedes usarla para entrar.');
+  } catch (err) {
+    console.error(err);
+    if (st) st.textContent = 'Error al guardar';
+  }
 }
 
 async function submitLogin() {
@@ -1348,6 +1423,22 @@ async function submitLogin() {
     const email = $('login-email').value.trim();
     const password = $('login-password').value;
     if (!email.includes('@')) { $('login-status').textContent = 'Email inválido'; return; }
+
+    if (loginMode === 'forgot') {
+      $('login-status').textContent = 'Enviando enlace...';
+      const redirectTo = `${location.origin}${location.pathname || '/'}`;
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+      if (error) {
+        $('login-status').textContent = error.message;
+        return;
+      }
+      $('login-status').textContent =
+        'Si existe una cuenta con ese email, recibirás un enlace para elegir contraseña nueva. Revisa spam.';
+      return;
+    }
+
     if (!password || password.length < 6) { $('login-status').textContent = 'Mínimo 6 caracteres'; return; }
     $('login-status').textContent = loginMode === 'login' ? 'Entrando...' : 'Creando...';
     if (loginMode === 'register') {
@@ -1429,6 +1520,11 @@ async function setupAuthListener() {
   try {
     await waitForSupabase();
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        state.session = session;
+        $('recovery-modal')?.classList.add('open');
+        return;
+      }
       state.session = session;
       if (event === 'SIGNED_IN' && session) {
         loadProfileFromLocalStorage();
@@ -1480,10 +1576,10 @@ async function init() {
   console.log('🚀 Inicializando app v26...');
   bindChartPage();
   initChartRoute();
+  await setupAuthListener();
   await initAuth();
   updateProfileBtn();
   await startApp();
-  await setupAuthListener();
   syncInstallBannerCopy();
   await handleCheckoutReturn();
   appReady = true;
