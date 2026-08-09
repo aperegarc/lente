@@ -49,12 +49,18 @@
 
       <!-- ============ HOY / FEED ============ -->
       <section class="screen active" id="screen-today">
-        <div class="progress-container" id="progress"></div>
-        <div class="ticker" id="ticker"></div>
-        <div id="feed-list"></div>
-        <footer class="app-legal-bar" role="contentinfo">
-          <p><strong>Aviso legal.</strong> Lente utiliza inteligencia artificial para sintetizar actualidad financiera. La información se ofrece con fines educativos y de agregación de noticias. No constituye asesoramiento financiero, recomendación de inversión ni gestión de instrumentos financieros según la normativa aplicable en España (incl. orientaciones de la CNMV). Consulta siempre fuentes y, si procede, a un profesional autorizado.</p>
-        </footer>
+        <div class="today-chrome">
+          <div class="progress-container" id="progress"></div>
+          <div class="ticker" id="ticker"></div>
+        </div>
+        <div class="feed-scroll" id="feed-scroll">
+          <div id="feed-list"></div>
+          <div class="feed-slide feed-slide--legal">
+            <footer class="app-legal-bar" role="contentinfo">
+              <p><strong>Aviso legal.</strong> Lente utiliza inteligencia artificial para sintetizar actualidad financiera. La información se ofrece con fines educativos y de agregación de noticias. No constituye asesoramiento financiero, recomendación de inversión ni gestión de instrumentos financieros según la normativa aplicable en España (incl. orientaciones de la CNMV). Consulta siempre fuentes y, si procede, a un profesional autorizado.</p>
+            </footer>
+          </div>
+        </div>
       </section>
 
       <!-- ============ MERCADOS ============ -->
@@ -239,8 +245,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/config.js"></script>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/api/public-config"></script>
   <script src="/app.js"></script>
   <script>
     // Registrar service worker para PWA

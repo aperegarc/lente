@@ -1,5 +1,5 @@
 // ============================================================
-// /public/app.js — Mercados: velas vía /api/candles (Yahoo) · gráfico Apache ECharts
+// /public/app.js — Mercados: Yahoo Finance · gráfico Apache ECharts (no TradingView)
 // Ruta /chart/:symbol (ej. /chart/BINANCE%3ABTCUSDT)
 // ============================================================
 
@@ -44,7 +44,7 @@ function cardAiSourceRowHtml(c) {
   return `<div class="card-ai-row">${parts.join('')}</div>`;
 }
 
-/** Rango y resolución (Yahoo interval) por botón de periodo */
+/** Rango y resolución Yahoo (v8) por botón de periodo */
 const CHART_TF = {
   '1D': { rangeSec: 86400, resolution: '15' },
   '1W': { rangeSec: 86400 * 7, resolution: '60' },
@@ -111,20 +111,6 @@ const TRADINGVIEW_MAP = {
   'SI=F': 'COMEX:SI1!',
 };
 
-/** Cripto en formato exchange (p. ej. BINANCE:…) para mensajes de error de velas. */
-function isCryptoChartSymbol(symbol) {
-  const s = String(symbol || '').trim();
-  return (
-    /^BINANCE:/i.test(s) ||
-    /^COINBASE:/i.test(s) ||
-    /^KRAKEN:/i.test(s) ||
-    /^CRYPTO:/i.test(s)
-  );
-}
-
-const CRYPTO_CANDLES_PLAN_MSG =
-  'No se pudieron cargar las velas de este activo (Yahoo puede no ofrecer intradía para este símbolo). Prueba otro periodo o un índice/acción líquido.';
-
 let supabaseClient = null;
 let supabaseReady = false;
 let authListenerInitialized = false;
@@ -158,14 +144,22 @@ const isStandalone =
   window.navigator.standalone === true;
 
 function initSupabase() {
-  if (window.supabase && !supabaseClient) {
+  const url = window.LENTE_CONFIG?.SUPABASE_URL;
+  const anon = window.LENTE_CONFIG?.SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    setTimeout(initSupabase, 100);
+    return;
+  }
+  const sdk = window.supabase;
+  if (sdk?.createClient && !supabaseClient) {
     try {
-      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      supabaseClient = sdk.createClient(url, anon);
       supabaseReady = true;
     } catch (err) {
+      console.error('[lente] createClient falló', err);
       setTimeout(initSupabase, 100);
     }
-  } else if (!window.supabase) {
+  } else if (!sdk?.createClient) {
     setTimeout(initSupabase, 100);
   }
 }
@@ -182,7 +176,17 @@ async function waitForSupabase() {
     await new Promise(r => setTimeout(r, 50));
     retries++;
   }
-  if (!supabaseReady) throw new Error('Supabase no se pudo inicializar');
+  if (!supabaseReady) {
+    const missingSdk = !window.supabase?.createClient;
+    const missingCfg = !window.LENTE_CONFIG?.SUPABASE_URL || !window.LENTE_CONFIG?.SUPABASE_ANON_KEY;
+    throw new Error(
+      missingCfg
+        ? 'Config vacía: falta SUPABASE_URL/ANON_KEY en Vercel (/api/public-config)'
+        : missingSdk
+          ? 'SDK Supabase no cargó (/vendor/supabase.js)'
+          : 'Supabase no se pudo inicializar',
+    );
+  }
   return supabaseClient;
 }
 
@@ -236,6 +240,7 @@ const state = {
 
 function isPremium() {
   if (!state.session) return false;
+  if (state.feedMeta?.plan_tier === 'premium') return true;
   const plan = state.profile?.plan;
   const expires = state.profile?.plan_expires_at;
   if (plan !== 'premium') return false;
@@ -293,10 +298,29 @@ $$('.nav-item').forEach(n => {
   n.addEventListener('click', () => switchScreen(n.dataset.screen));
 });
 
+function feedSlide(innerHtml) {
+  return `<div class="feed-slide">${innerHtml}</div>`;
+}
+
+/** Vuelve al primer slide (resumen del día). Evita quedar al final tras restaurar scroll del navegador/PWA. */
+function scrollFeedToStart() {
+  const el = $('feed-scroll');
+  if (!el) return;
+  const reset = () => {
+    el.scrollTop = 0;
+  };
+  reset();
+  requestAnimationFrame(() => {
+    reset();
+    requestAnimationFrame(reset);
+  });
+}
+
 async function loadFeed() {
   const feedList = $('feed-list');
   if (!feedList) return;
-  feedList.innerHTML = `<div class="loading">Cargando...</div>`;
+  feedList.innerHTML = feedSlide('<div class="loading">Cargando...</div>');
+  scrollFeedToStart();
   try {
     await waitForSupabase();
     const url = API.feed + '?_t=' + Date.now();
@@ -322,7 +346,7 @@ async function loadFeed() {
     renderFeed();
   } catch (err) {
     console.error('❌ Error loadFeed:', err.message);
-    if (feedList) feedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
+    if (feedList) feedList.innerHTML = feedSlide(`<div class="empty-state"><h2>Error</h2><p>${escapeHtml(err.message)}</p></div>`);
   }
 }
 
@@ -342,24 +366,34 @@ function renderFeed(filterCategory = null) {
   if (dateLabel) dateLabel.textContent = fmtDate(state.feed.date);
   if (editionLabel) editionLabel.textContent = filterCategory ? `Filtro · ${filterCategory}` : 'Edición del día';
   if (!cards || cards.length === 0) {
-    feedList.innerHTML = `<div class="empty-state"><h2>${filterCategory ? `Sin noticias de ${filterCategory}` : 'Sin contenido todavía'}</h2></div>`;
+    feedList.innerHTML = feedSlide(
+      `<div class="empty-state"><h2>${escapeHtml(filterCategory ? `Sin noticias de ${filterCategory}` : 'Sin contenido todavía')}</h2></div>`,
+    );
+    scrollFeedToStart();
     return;
   }
   const totalReadTime = Math.round(cards.reduce((a, c) => a + (c.read_time_seconds || 40), 0) / 60);
   const locked = !filterCategory && !isPremium() && (state.feedMeta?.locked_count > 0);
-  const upsell = locked
-    ? `<section class="card card-upsell"><p class="upsell-text"><strong>${state.feedMeta.locked_count} noticia${state.feedMeta.locked_count === 1 ? '' : 's'} más</strong> en esta edición con <strong>Premium</strong> — 5 €/mes o 20 €/año (histórico + guardar).</p></section>`
-    : '';
-  let html = `<section class="card card-intro"><div class="intro-label">${filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día'}</div><p class="intro-ai-disclosure">Contenido del día elaborado o resumido con <strong>asistencia de IA</strong>. Finalidad informativa; no es asesoramiento ni recomendación de inversión.</p><h1 class="intro-title">${filterCategory ? `<em>${filterCategory}</em>` : 'Buenos días.'}</h1><p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p><div class="intro-stats"><div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div><div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura</div></div></div></section>${upsell}`;
+  let html = feedSlide(
+    `<section class="card card-intro"><div class="intro-label">${escapeHtml(filterCategory ? `Filtrado por ${filterCategory}` : 'Tu resumen del día')}</div><p class="intro-ai-disclosure">Contenido del día elaborado o resumido con <strong>asistencia de IA</strong>. Finalidad informativa; no es asesoramiento ni recomendación de inversión.</p><h1 class="intro-title">${filterCategory ? `<em>${escapeHtml(filterCategory)}</em>` : 'Buenos días.'}</h1><p class="intro-summary">${cards.length} ${cards.length === 1 ? 'noticia' : 'noticias'}, ${totalReadTime} min de lectura.</p><div class="intro-stats"><div class="intro-stat"><div class="num">${cards.length}</div><div class="txt">noticias</div></div><div class="intro-stat"><div class="num">${totalReadTime}<span style="font-size:13px;color:var(--ink-dim);"> min</span></div><div class="txt">lectura</div></div></div></section>`,
+  );
+  if (locked) {
+    html += feedSlide(
+      `<section class="card card-upsell"><p class="upsell-text"><strong>${state.feedMeta.locked_count} noticia${state.feedMeta.locked_count === 1 ? '' : 's'} más</strong> en esta edición con <strong>Premium</strong> — 5 €/mes o 20 €/año (histórico + guardar).</p></section>`,
+    );
+  }
   for (const c of cards) {
     const catClass = CATEGORY_COLORS[c.category] || '';
     const saved = state.savedIds.has(c.id);
     const saveLocked = !isPremium();
     const saveClass = `${saved ? 'saved' : ''} ${saveLocked ? 'action-btn-save-lock' : ''}`;
     const aiRow = cardAiSourceRowHtml(c);
-    html += `<section class="card" data-id="${c.id}"><div class="card-meta"><span class="category ${catClass}">${c.category}</span><span class="read-time">· ${c.read_time_seconds || 40} s</span></div>${aiRow}<h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${c.id}">${c.body}</p><button class="read-more-btn" id="readmore-${c.id}" onclick="toggleReadMore('${c.id}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${c.meaning}</p></div><div class="card-footer"><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${c.id}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`;
+    html += feedSlide(
+      `<section class="card" data-id="${escapeAttr(c.id)}"><div class="card-meta"><span class="category ${escapeAttr(catClass)}">${escapeHtml(c.category)}</span><span class="read-time">· ${Number(c.read_time_seconds) || 40} s</span></div>${aiRow}<h2 class="headline">${escapeHtml(c.headline)}</h2><p class="deck">${escapeHtml(c.deck)}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${escapeAttr(c.id)}">${escapeHtml(c.body)}</p><button class="read-more-btn" id="readmore-${escapeAttr(c.id)}" onclick="toggleReadMore('${escapeAttr(c.id)}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${escapeHtml(c.meaning)}</p></div><div class="card-footer"><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${escapeAttr(c.id)}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${escapeAttr(c.id)}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`,
+    );
   }
   feedList.innerHTML = html;
+  scrollFeedToStart();
 }
 
 function renderTicker() {
@@ -457,8 +491,8 @@ function renderMarkets() {
       html += `
         <div class="market-item" role="button" tabindex="0" data-chart="${dsym}" data-name="${dname}">
           <div class="market-item-left">
-            <div class="market-item-name">${m.name}</div>
-            <div class="market-item-desc">${m.description || ''}</div>
+            <div class="market-item-name">${escapeHtml(m.name)}</div>
+            <div class="market-item-desc">${escapeHtml(m.description || '')}</div>
           </div>
           <div class="market-item-right">
             <div class="market-price">${m.price != null && !Number.isNaN(+m.price) ? `${prefix}${fmtNum(m.price, priceDigits)}` : '–'}</div>
@@ -600,13 +634,6 @@ async function refreshChartData() {
     const res = await fetch(url);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const denied =
-        data.httpStatus === 403 ||
-        data.httpStatus === 401 ||
-        /don't have access|no access to this resource/i.test(String(data.detail || ''));
-      if (isCryptoChartSymbol(sym) && denied) {
-        throw new Error(CRYPTO_CANDLES_PLAN_MSG);
-      }
       const parts = [data.error, data.detail, data.hint].filter(Boolean);
       throw new Error(parts.length ? parts.join(' · ') : `Error ${res.status}`);
     }
@@ -614,12 +641,12 @@ async function refreshChartData() {
     if (!data.ok || data.status !== 'ok' || !data.candles?.length) {
       errEl.textContent =
         data.status === 'no_data'
-          ? 'No hay velas para este activo en este periodo (Yahoo Finance).'
+          ? (data.hint || 'No hay velas para este activo en este periodo (Yahoo Finance).')
           : 'No se pudieron obtener las velas.';
       errEl.hidden = false;
       return;
     }
-    await renderCandleChart(data.candles);
+    await renderMarketChart(data.candles);
   } catch (e) {
     loading.style.display = 'none';
     errEl.textContent = e.message || 'Error de red';
@@ -627,7 +654,7 @@ async function refreshChartData() {
   }
 }
 
-async function renderCandleChart(candles) {
+async function renderMarketChart(candles) {
   await loadEchartsScript();
   const container = $('chart-page-container');
   container.innerHTML = '';
@@ -895,17 +922,25 @@ async function renderSaved() {
       savedList.innerHTML = `<div class="empty-state"><h2>Aún no guardaste nada</h2></div>`;
       return;
     }
-    const { data: rows, error } = await supabaseClient.from('cards').select('*').in('id', ids).eq('status', 'published');
-    if (error) throw error;
-    const byId = new Map((rows || []).map((c) => [c.id, c]));
+    const token = state.session?.access_token;
+    const res = await fetch(`${API.cards}?ids=${encodeURIComponent(ids.join(','))}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload.error || payload.message || `HTTP ${res.status}`);
+    const rows = payload.cards || [];
+    const byId = new Map(rows.map((c) => [c.id, c]));
     const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
     state._savedCardCache = Object.fromEntries(ordered.map((c) => [c.id, c]));
     savedList.innerHTML = ordered.length === 0
       ? `<div class="empty-state"><h2>No hay guardados visibles</h2></div>`
-      : ordered.map(c => `<section class="card"><div class="card-meta"><span class="category">${c.category}</span></div>${cardAiSourceRowHtml(c)}<h2 class="headline">${c.headline}</h2><p class="deck">${c.deck}</p><div class="card-footer"><button type="button" class="action-btn saved" onclick="toggleSave('${c.id}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`).join('');
+      : ordered.map((c) => {
+          const catClass = CATEGORY_COLORS[c.category] || '';
+          return `<section class="card"><div class="card-meta"><span class="category ${escapeAttr(catClass)}">${escapeHtml(c.category)}</span></div>${cardAiSourceRowHtml(c)}<h2 class="headline">${escapeHtml(c.headline)}</h2><p class="deck">${escapeHtml(c.deck)}</p><div class="card-footer"><button type="button" class="action-btn saved" onclick="toggleSave('${escapeAttr(c.id)}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button></div></section>`;
+        }).join('');
   } catch (err) {
     console.error('renderSaved:', err);
-    savedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
+    savedList.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${escapeHtml(err.message)}</p></div>`;
   }
 }
 
@@ -1036,7 +1071,7 @@ function renderProfileModal() {
   modal.innerHTML = `
     <div style="text-align:center;padding:20px 0;border-bottom:1px solid #e1e3e4;margin-bottom:20px;">
       <div style="width:56px;height:56px;border-radius:50%;background:#edeeef;border:1px solid #c1c8c7;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:#0f2d2e;">${email[0]?.toUpperCase() || '?'}</div>
-      <div style="font-size:15px;font-weight:500;">${email}</div>
+      <div style="font-size:15px;font-weight:500;">${escapeHtml(email)}</div>
       <div style="margin-top:8px;">${planBadge}</div>
       ${!isPrem ? `<p style="font-size:13px;color:var(--ink-dim);margin-top:14px;line-height:1.45;">Plan <strong>Free</strong>: 5 noticias del día y mercados. <strong>Premium</strong>: todas las noticias, histórico y guardar.</p>
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e1e3e4;">
@@ -1333,88 +1368,13 @@ function closeLogin() { $('login-modal')?.classList.remove('open'); }
 function closeProfileModal() { $('profile-modal')?.classList.remove('open'); }
 
 let loginMode = 'login';
-
-function syncLoginModalUi() {
-  const isLogin = loginMode === 'login';
-  const isRegister = loginMode === 'register';
-  const isForgot = loginMode === 'forgot';
-  const tabs = document.querySelector('#login-modal .login-tabs');
-  if (tabs) tabs.style.display = isForgot ? 'none' : 'flex';
-  if ($('tab-login')) {
-    $('tab-login').style.background = isLogin && !isForgot ? '' : 'transparent';
-    $('tab-login').style.color = isLogin && !isForgot ? '' : '#717878';
-  }
-  if ($('tab-register')) {
-    $('tab-register').style.background = isRegister ? '' : 'transparent';
-    $('tab-register').style.color = isRegister ? '' : '#717878';
-  }
-  const passField = $('login-password-field');
-  if (passField) passField.style.display = isForgot ? 'none' : '';
-  const forgotRow = $('login-forgot-row');
-  if (forgotRow) forgotRow.style.display = isLogin && !isForgot ? '' : 'none';
-  const backForgot = $('login-back-from-forgot');
-  if (backForgot) backForgot.style.display = isForgot ? '' : 'none';
-  if ($('login-submit-btn')) {
-    if (isForgot) $('login-submit-btn').textContent = 'Enviar enlace de recuperación';
-    else $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
-  }
-  if ($('login-modal-title')) {
-    if (isForgot) $('login-modal-title').innerHTML = 'Recuperar <em>acceso</em>';
-    else $('login-modal-title').innerHTML = 'Accede a <em>lente</em>';
-  }
-}
-
 function showTab(mode) {
-  loginMode = mode === 'register' ? 'register' : 'login';
+  loginMode = mode;
+  const isLogin = mode === 'login';
+  if ($('tab-login')) { $('tab-login').style.background = isLogin ? '' : 'transparent'; $('tab-login').style.color = isLogin ? '' : '#717878'; }
+  if ($('tab-register')) { $('tab-register').style.background = isLogin ? 'transparent' : ''; $('tab-register').style.color = isLogin ? '#717878' : ''; }
+  if ($('login-submit-btn')) $('login-submit-btn').textContent = isLogin ? 'Entrar' : 'Crear cuenta';
   if ($('login-status')) $('login-status').textContent = '';
-  syncLoginModalUi();
-}
-
-function showForgotPassword() {
-  loginMode = 'forgot';
-  if ($('login-status')) $('login-status').textContent = '';
-  syncLoginModalUi();
-}
-
-function closeRecoveryModal() {
-  $('recovery-modal')?.classList.remove('open');
-  if ($('recovery-password')) $('recovery-password').value = '';
-  if ($('recovery-password-2')) $('recovery-password-2').value = '';
-  if ($('recovery-status')) $('recovery-status').textContent = '';
-}
-
-async function submitNewPassword() {
-  const st = $('recovery-status');
-  const p1 = ($('recovery-password')?.value || '').trim();
-  const p2 = ($('recovery-password-2')?.value || '').trim();
-  if (!p1 || p1.length < 6) {
-    if (st) st.textContent = 'Mínimo 6 caracteres';
-    return;
-  }
-  if (p1 !== p2) {
-    if (st) st.textContent = 'Las contraseñas no coinciden';
-    return;
-  }
-  try {
-    await waitForSupabase();
-    if (st) st.textContent = 'Guardando...';
-    const { error } = await supabaseClient.auth.updateUser({ password: p1 });
-    if (error) {
-      if (st) st.textContent = error.message;
-      return;
-    }
-    closeRecoveryModal();
-    const { data: { session: s } } = await supabaseClient.auth.getSession();
-    state.session = s;
-    if (s?.user?.id) await loadProfile(s.user.id);
-    updateProfileBtn();
-    await loadFeed();
-    renderFeed();
-    toast('Contraseña actualizada. Ya puedes usarla para entrar.');
-  } catch (err) {
-    console.error(err);
-    if (st) st.textContent = 'Error al guardar';
-  }
 }
 
 async function submitLogin() {
@@ -1423,22 +1383,6 @@ async function submitLogin() {
     const email = $('login-email').value.trim();
     const password = $('login-password').value;
     if (!email.includes('@')) { $('login-status').textContent = 'Email inválido'; return; }
-
-    if (loginMode === 'forgot') {
-      $('login-status').textContent = 'Enviando enlace...';
-      const redirectTo = `${location.origin}${location.pathname || '/'}`;
-      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo,
-      });
-      if (error) {
-        $('login-status').textContent = error.message;
-        return;
-      }
-      $('login-status').textContent =
-        'Si existe una cuenta con ese email, recibirás un enlace para elegir contraseña nueva. Revisa spam.';
-      return;
-    }
-
     if (!password || password.length < 6) { $('login-status').textContent = 'Mínimo 6 caracteres'; return; }
     $('login-status').textContent = loginMode === 'login' ? 'Entrando...' : 'Creando...';
     if (loginMode === 'register') {
@@ -1492,7 +1436,11 @@ function loadProfileFromLocalStorage() {
 async function loadProfile(userId) {
   try {
     await waitForSupabase();
-    const { data, error } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('plan, plan_expires_at, daily_reminder_enabled, name, streak_days, last_visit')
+      .eq('id', userId)
+      .single();
     state.profile = data || { plan: 'free', is_admin: false, daily_reminder_enabled: false };
     if (!error) saveProfileToLocalStorage();
   } catch (err) {
@@ -1520,11 +1468,6 @@ async function setupAuthListener() {
   try {
     await waitForSupabase();
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        state.session = session;
-        $('recovery-modal')?.classList.add('open');
-        return;
-      }
       state.session = session;
       if (event === 'SIGNED_IN' && session) {
         loadProfileFromLocalStorage();
@@ -1574,12 +1517,17 @@ async function startApp() {
 
 async function init() {
   console.log('🚀 Inicializando app v26...');
+  if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+  }
+  scrollFeedToStart();
   bindChartPage();
   initChartRoute();
-  await setupAuthListener();
   await initAuth();
   updateProfileBtn();
   await startApp();
+  scrollFeedToStart();
+  await setupAuthListener();
   syncInstallBannerCopy();
   await handleCheckoutReturn();
   appReady = true;

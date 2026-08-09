@@ -594,31 +594,6 @@
       margin-bottom: 22px;
     }
 
-    .admin-link-btn {
-      background: none;
-      border: none;
-      padding: 0;
-      font: inherit;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--accent);
-      cursor: pointer;
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-
-    .login-card.recovery-active .hide-on-recovery {
-      display: none !important;
-    }
-
-    #admin-recovery-panel {
-      display: none;
-    }
-
-    .login-card.recovery-active #admin-recovery-panel {
-      display: block !important;
-    }
-
     .field {
       margin-bottom: 16px;
     }
@@ -832,36 +807,21 @@
     <div class="login-card">
       <div class="login-brand">lente<span class="brand-dot">.</span></div>
       <div class="login-sub">Admin</div>
-      <h1 class="login-title hide-on-recovery">Acceso de redacción</h1>
-      <p class="login-help hide-on-recovery">Solo para editores. Puedes entrar con enlace mágico o con email + contraseña.</p>
-      <div class="field hide-on-recovery">
+      <h1 class="login-title">Acceso de redacción</h1>
+      <p class="login-help">Solo para editores. Puedes entrar con enlace mágico o con email + contraseña.</p>
+      <div class="field">
         <label>Tu email</label>
         <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" />
       </div>
-      <div class="field hide-on-recovery">
+      <div class="field">
         <label>Contraseña (opcional)</label>
         <input type="password" id="login-password" placeholder="Tu contraseña de Supabase"
           autocomplete="current-password" />
         <div class="field-hint">Si no tienes contraseña, usa "Enviar enlace de acceso".</div>
       </div>
-      <div class="login-actions hide-on-recovery" style="display:flex; gap:10px;">
+      <div style="display:flex; gap:10px;">
         <button class="btn btn-primary" style="flex:1;" onclick="sendMagicLink()">Enviar enlace de acceso</button>
         <button class="btn" style="flex:1;" onclick="signInWithPassword()">Entrar con contraseña</button>
-      </div>
-      <p style="margin:12px 0 0;font-size:13px;" class="hide-on-recovery">
-        <button type="button" class="admin-link-btn" onclick="sendPasswordRecovery()">¿Olvidaste tu contraseña?</button>
-      </p>
-      <div id="admin-recovery-panel" style="display:none;">
-        <p class="login-help" style="margin-bottom:14px;">Elige una contraseña nueva para tu cuenta (<span id="admin-recovery-email"></span>).</p>
-        <div class="field">
-          <label>Nueva contraseña</label>
-          <input type="password" id="admin-recovery-p1" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
-        </div>
-        <div class="field">
-          <label>Confirmar</label>
-          <input type="password" id="admin-recovery-p2" placeholder="Repite" autocomplete="new-password" />
-        </div>
-        <button type="button" class="btn btn-primary" style="width:100%;" onclick="submitAdminRecoveryPassword()">Guardar contraseña</button>
       </div>
       <div class="login-status" id="login-status"></div>
     </div>
@@ -1064,8 +1024,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
-  <script src="/config.js"></script>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/api/public-config"></script>
   <script>
     /* ============================================================
        lente Admin · Revisión editorial
@@ -1102,71 +1062,6 @@
 
     // ============ AUTH ============
 
-    function setAdminRecoveryActive(on, email) {
-      const card = document.querySelector('#login-view .login-card');
-      if (card) card.classList.toggle('recovery-active', !!on);
-      const em = $('admin-recovery-email');
-      if (em && email) em.textContent = email;
-      if (!on) {
-        if ($('admin-recovery-p1')) $('admin-recovery-p1').value = '';
-        if ($('admin-recovery-p2')) $('admin-recovery-p2').value = '';
-      }
-    }
-
-    async function sendPasswordRecovery() {
-      const client = getSupabaseClient();
-      const email = $('login-email').value.trim();
-      const status = $('login-status');
-      if (!email.includes('@')) {
-        status.className = 'login-status show error';
-        status.textContent = 'Introduce un email válido en el campo de arriba';
-        return;
-      }
-      status.className = 'login-status show';
-      status.textContent = 'Enviando enlace...';
-      const { error } = await client.auth.resetPasswordForEmail(email, {
-        redirectTo: `${location.origin}/admin`,
-      });
-      if (error) {
-        status.className = 'login-status show error';
-        status.textContent = error.message;
-        return;
-      }
-      status.className = 'login-status show success';
-      status.textContent =
-        'Si existe una cuenta con ese email, recibirás un enlace para restablecer la contraseña. Revisa spam.';
-    }
-
-    async function submitAdminRecoveryPassword() {
-      const client = getSupabaseClient();
-      const p1 = $('admin-recovery-p1').value;
-      const p2 = $('admin-recovery-p2').value;
-      const status = $('login-status');
-      if (!p1 || p1.length < 6) {
-        status.className = 'login-status show error';
-        status.textContent = 'Mínimo 6 caracteres';
-        return;
-      }
-      if (p1 !== p2) {
-        status.className = 'login-status show error';
-        status.textContent = 'Las contraseñas no coinciden';
-        return;
-      }
-      status.className = 'login-status show';
-      status.textContent = 'Guardando...';
-      const { error } = await client.auth.updateUser({ password: p1 });
-      if (error) {
-        status.className = 'login-status show error';
-        status.textContent = error.message;
-        return;
-      }
-      setAdminRecoveryActive(false);
-      status.className = 'login-status show success';
-      status.textContent = 'Contraseña actualizada.';
-      toast('Contraseña guardada');
-      await checkSession();
-    }
-
     async function checkSession() {
       const client = getSupabaseClient();
       const { data: { session } } = await client.auth.getSession();
@@ -1178,22 +1073,22 @@
         return false;
       }
 
-      if (document.querySelector('#login-view .login-card')?.classList.contains('recovery-active')) {
-        $('login-view').style.display = 'flex';
-        $('admin-view').style.display = 'none';
-        return false;
-      }
+      // Verificar is_admin en profiles (RLS: solo fila propia)
+      const { data: profile, error: profileErr } = await client
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .single();
 
-      // Verificar que es admin
-      // Temporal: permitir cualquier usuario logueado como admin para testing
-      state.isAdmin = true;
+      state.isAdmin = !profileErr && profile?.is_admin === true;
 
       if (!state.isAdmin) {
         $('login-view').style.display = 'flex';
         $('admin-view').style.display = 'none';
         const status = $('login-status');
         status.className = 'login-status show error';
-        status.textContent = 'Tu usuario no tiene permisos de admin. Contacta con el administrador para activarlos en la base de datos (tabla profiles, campo is_admin).';
+        status.textContent =
+          'Tu usuario no tiene permisos de admin. Contacta con el administrador (profiles.is_admin = true).';
         return false;
       }
 
@@ -1205,7 +1100,6 @@
 
     async function sendMagicLink() {
       const client = getSupabaseClient();
-      setAdminRecoveryActive(false);
       const email = $('login-email').value.trim();
       const status = $('login-status');
 
@@ -1235,7 +1129,6 @@
 
     async function signInWithPassword() {
       const client = getSupabaseClient();
-      setAdminRecoveryActive(false);
       const email = $('login-email').value.trim();
       const password = $('login-password').value;
       const status = $('login-status');
@@ -1275,19 +1168,10 @@
     function initAuthListeners() {
       try {
         const client = getSupabaseClient();
-        client.auth.onAuthStateChange(async (event, session) => {
-          if (event === 'PASSWORD_RECOVERY') {
-            state.session = session;
-            $('login-view').style.display = 'flex';
-            $('admin-view').style.display = 'none';
-            setAdminRecoveryActive(true, session?.user?.email || '');
-            const status = $('login-status');
-            status.className = 'login-status show';
-            status.textContent = 'Elige tu nueva contraseña abajo.';
-            return;
-          }
-          const ok = await checkSession();
-          if (ok) await loadCards();
+        client.auth.onAuthStateChange(() => {
+          checkSession().then(ok => {
+            if (ok) loadCards();
+          });
         });
       } catch (err) {
         const status = $('login-status');
@@ -1395,7 +1279,7 @@
         <span class="rc-status ${c.status}">${statusLabel(c.status)}</span>
       </div>
       <div class="rc-body">
-        <h3 class="rc-headline">${c.headline}</h3>
+        <h3 class="rc-headline">${escapeHTML(c.headline)}</h3>
         <p class="rc-deck">${escapeHTML(c.deck)}</p>
         <div class="rc-section">Qué ha pasado</div>
         <p class="rc-text">${escapeHTML(c.body)}</p>
@@ -1407,17 +1291,17 @@
       </div>
       <div class="rc-actions">
         ${c.status === 'pending' ? `
-          <button class="btn btn-sm btn-primary" onclick="act('${c.id}','approve')">Aprobar</button>
-          <button class="btn btn-sm" onclick="edit('${c.id}')">Editar</button>
-          <button class="btn btn-sm btn-danger" onclick="act('${c.id}','reject')">Rechazar</button>
+          <button class="btn btn-sm btn-primary" onclick="act('${escapeAttr(c.id)}','approve')">Aprobar</button>
+          <button class="btn btn-sm" onclick="edit('${escapeAttr(c.id)}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="act('${escapeAttr(c.id)}','reject')">Rechazar</button>
         ` : ''}
         ${c.status === 'approved' ? `
-          <button class="btn btn-sm" onclick="edit('${c.id}')">Editar</button>
-          <button class="btn btn-sm btn-danger" onclick="act('${c.id}','reject')">Devolver a rechazada</button>
+          <button class="btn btn-sm" onclick="edit('${escapeAttr(c.id)}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="act('${escapeAttr(c.id)}','reject')">Devolver a rechazada</button>
         ` : ''}
         ${c.status === 'rejected' ? `
-          <button class="btn btn-sm btn-primary" onclick="act('${c.id}','approve')">Recuperar y aprobar</button>
-          <button class="btn btn-sm" onclick="edit('${c.id}')">Editar</button>
+          <button class="btn btn-sm btn-primary" onclick="act('${escapeAttr(c.id)}','approve')">Recuperar y aprobar</button>
+          <button class="btn btn-sm" onclick="edit('${escapeAttr(c.id)}')">Editar</button>
         ` : ''}
         ${c.status === 'published' ? `
           <span style="font-size:11px;color:var(--ink-muted);padding:6px 0;">Visible en el feed público</span>
@@ -1444,9 +1328,16 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        // Pero permitimos <em></em> porque viene del modelo
         .replace(/&lt;em&gt;/g, '<em>')
         .replace(/&lt;\/em&gt;/g, '</em>');
+    }
+
+    function escapeAttr(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;');
     }
 
     // ============ ACCIONES ============
@@ -1628,8 +1519,6 @@
     // ============ INIT ============
 
     (async () => {
-      window.sendPasswordRecovery = sendPasswordRecovery;
-      window.submitAdminRecoveryPassword = submitAdminRecoveryPassword;
       window.sendMagicLink = sendMagicLink;
       window.signInWithPassword = signInWithPassword;
       window.logout = logout;

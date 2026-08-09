@@ -1,10 +1,10 @@
-const VERSION = 'lente-v3';
+const VERSION = 'lente-v5';
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
-  '/config.js',
+  '/vendor/supabase.js',
   '/manifest.json',
 ];
 
@@ -28,9 +28,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-  if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase')) return;
+  // CDN, APIs y config dinámica: sin interceptar (evita CSP + caché vacía)
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/') || url.pathname === '/config.js') return;
+  if (url.hostname.includes('supabase')) return;
 
-  // Network-first: intenta red, si falla usa caché
   event.respondWith(
     fetch(event.request)
       .then(response => {

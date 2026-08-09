@@ -1,6 +1,6 @@
 /* ============================================================
    lente · PWA — Serene Capital / Stitch (claro, editorial)
-   Feed: conserva min-height y scroll-snap de .card sin cambios.
+   Feed: una tarjeta por vista (scroll-snap en .feed-scroll + .feed-slide).
    ============================================================ */
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
@@ -42,9 +42,11 @@ html, body {
 
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  max-width: 640px;
+  width: 100%;
+  max-width: min(540px, 100%);
   margin: 0 auto;
   position: relative;
 }
@@ -171,7 +173,55 @@ html, body {
 .screen::-webkit-scrollbar { display: none; }
 .screen { -ms-overflow-style: none; scrollbar-width: none; }
 
-#screen-today { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+/* HOY: chrome fijo + carril de feed con snap (no scroll de toda la pantalla) */
+#screen-today.screen.active {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
+
+.today-chrome {
+  flex-shrink: 0;
+}
+
+.feed-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  scroll-padding-top: 8px;
+  scroll-padding-bottom: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.feed-scroll::-webkit-scrollbar { display: none; }
+.feed-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+#feed-list {
+  display: contents;
+}
+
+.feed-slide {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 12px 16px 16px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed-slide--legal {
+  justify-content: center;
+  padding-top: 16px;
+  padding-bottom: 20px;
+}
 
 /* ===== Pantalla gráfico (/chart/…) ===== */
 #screen-chart.screen.active {
@@ -384,11 +434,9 @@ html, body {
 .down { color: var(--red); }
 .flat { color: var(--ink-dim); }
 
-/* ===== Card ===== (min-height = altura de “slide”; no tocar) */
+/* ===== Card ===== */
 .card {
-  min-height: calc(100vh - 160px - var(--safe-bottom));
-  padding: 28px 20px 36px;
-  scroll-snap-align: start;
+  padding: 26px 20px 32px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -397,6 +445,14 @@ html, body {
   border-radius: 16px;
   border: 1px solid rgba(193, 200, 199, 0.35);
   box-shadow: var(--shadow-card);
+}
+
+.feed-slide .card {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  width: 100%;
+  align-self: stretch;
 }
 
 .card-meta {
@@ -934,15 +990,16 @@ html, body {
 .nav-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.65; }
 
 .app-legal-bar {
-  margin: 8px 16px 4px;
-  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  margin: 0;
+  padding: 14px 16px;
   font-size: 10px;
   line-height: 1.55;
   color: var(--ink-muted);
   background: rgba(248, 249, 250, 0.95);
   border-radius: 12px;
   border: 1px solid rgba(193, 200, 199, 0.4);
-  scroll-snap-align: end;
+  width: 100%;
+  box-sizing: border-box;
 }
 .app-legal-bar p {
   margin: 0;
@@ -1153,6 +1210,7 @@ html, body {
     border-left: 1px solid rgba(193, 200, 199, 0.5);
     border-right: 1px solid rgba(193, 200, 199, 0.5);
     min-height: 100vh;
+    min-height: 100dvh;
   }
   body { background: #eef1f2; }
 }

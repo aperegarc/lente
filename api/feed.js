@@ -2,9 +2,13 @@
 // /api/feed.js — feed del día (freemium: free = 5 tarjetas)
 // ============================================================
 
-import { getSupabaseAnon, getUserFromToken } from './_lib/clients.js';
+import { getSupabaseAdmin, getUserFromToken } from './_lib/clients.js';
+import { isIsoDate } from './_lib/validate.js';
 
 const FREE_CARD_LIMIT = 5;
+
+const PUBLIC_CARD_FIELDS =
+  'id, category, headline, deck, body, meaning, sources_text, primary_source_url, legal_tag, is_ai_generated, read_time_seconds, edition_date, order_index, published_at';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store, must-revalidate');
@@ -12,9 +16,9 @@ export default async function handler(req, res) {
 
   let supabase;
   try {
-    supabase = getSupabaseAnon();
+    supabase = getSupabaseAdmin();
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Error interno' });
   }
 
   const userCtx = await getUserFromToken(req);
@@ -46,6 +50,9 @@ export default async function handler(req, res) {
 
   let targetEdition = latestEdition;
   if (editionDateParam) {
+    if (!isIsoDate(editionDateParam)) {
+      return res.status(400).json({ error: 'edition_date inválida' });
+    }
     if (!premium && editionDateParam !== latestEdition) {
       return res.status(403).json({
         error: 'premium_required',
@@ -57,12 +64,12 @@ export default async function handler(req, res) {
 
   const { data: fullList, error } = await supabase
     .from('cards')
-    .select('*')
+    .select(PUBLIC_CARD_FIELDS)
     .eq('status', 'published')
     .eq('edition_date', targetEdition)
     .order('order_index', { ascending: true });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: 'Error interno' });
 
   const pool = fullList || [];
   const totalInEdition = pool.length;

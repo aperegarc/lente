@@ -1,67 +1,16 @@
 // ============================================================
-// /api/candles.js — velas OHLCV vía API pública Yahoo Finance v8
+// /api/candles.js — velas vía Yahoo Finance v8 (sin API key)
 // GET ?symbol=...&resolution=15|60|D&from=<unix>&to=<unix>
 // ============================================================
 
-const YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart';
-
-/** Símbolo estilo TradingView / app → ticker Yahoo */
-function resolveYahooSymbol(tvSymbol) {
-  const s = String(tvSymbol || '').trim();
-  if (!s) return null;
-
-  if (/^BINANCE:/i.test(s) || /^COINBASE:/i.test(s) || /^KRAKEN:/i.test(s) || /^CRYPTO:/i.test(s)) {
-    const raw = (s.split(':')[1] || '').trim();
-    if (/USDT$/i.test(raw)) {
-      const base = raw.replace(/USDT$/i, '');
-      return `${base}-USD`;
-    }
-    if (/-USD$/i.test(raw)) return raw;
-    return raw.includes('-') ? raw : `${raw}-USD`;
-  }
-
-  const fxMap = {
-    'FX:EURUSD': 'EURUSD=X',
-    'FX:GBPUSD': 'GBPUSD=X',
-    'FX:USDJPY': 'JPY=X',
-    'FX:USDCHF': 'CHF=X',
-    'FX:AUDUSD': 'AUDUSD=X',
-    'FX:USDCAD': 'CAD=X',
-  };
-  if (fxMap[s]) return fxMap[s];
-
-  const idxMap = {
-    'IBEX:IBEX': '^IBEX',
-    'FOREXCOM:SPX500': '^GSPC',
-    'NASDAQ:CCMP': '^IXIC',
-    'STOXX:STOXX50E': '^STOXX50E',
-  };
-  if (idxMap[s]) return idxMap[s];
-
-  const bme = s.match(/^(BME|XMAD):(.+)$/i);
-  if (bme) return `${bme[2].toUpperCase()}.MC`;
-
-  if (s.includes(':')) {
-    const tick = s.split(':').pop();
-    return tick || s;
-  }
-
-  return s;
-}
-
-function mapResolutionToYahooInterval(resolution) {
-  const r = String(resolution || '60');
-  if (r === 'D' || r === '1D') return '1d';
-  if (r === '60' || r === '1h') return '1h';
-  if (r === '30') return '30m';
-  if (r === '15') return '15m';
-  if (r === '5') return '5m';
-  if (r === '1') return '1m';
-  return '15m';
-}
+import {
+  resolveTvSymbolToYahoo,
+  yahooSymbolFallbacks,
+  fetchYahooCandles,
+} from './_lib/yahoo-chart.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
 
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -86,103 +35,46 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Rango from/to inválido' });
   }
 
-  const yahooSym = resolveYahooSymbol(symbol);
-  if (!yahooSym) return res.status(400).json({ error: 'Símbolo inválido' });
+  const yahooPrimary = resolveTvSymbolToYahoo(symbol);
+  if (!yahooPrimary) return res.status(400).json({ error: 'Símbolo inválido' });
 
   const fromI = Math.floor(from);
   const toI = Math.floor(to);
-  const interval = mapResolutionToYahooInterval(resolution);
+  const candidates = yahooSymbolFallbacks(yahooPrimary);
 
-  const url = `${YAHOO_CHART}/${encodeURIComponent(yahooSym)}?period1=${fromI}&period2=${toI}&interval=${encodeURIComponent(interval)}`;
-
-  let r;
-  try {
-    r = await fetch(url, {
-      headers: { 'User-Agent': 'lente-candles/1.0 (educational; serverless)' },
-    });
-  } catch (e) {
-    return res.status(502).json({ error: 'Red Yahoo Finance', detail: e.message });
+  let fetched = null;
+  let usedSymbol = yahooPrimary;
+  for (const cand of candidates) {
+    try {
+      fetched = await fetchYahooCandles(cand, fromI, toI, resolution);
+      if (fetched?.candles?.length) {
+        usedSymbol = cand;
+        break;
+      }
+    } catch (e) {
+      console.error('[candles] Yahoo', cand, e.message);
+    }
   }
 
-  let j;
-  try {
-    j = await r.json();
-  } catch {
-    return res.status(502).json({ error: 'Respuesta Yahoo no JSON' });
-  }
-
-  if (!r.ok) {
-    return res.status(502).json({
-      error: 'Yahoo Finance rechazó la petición',
-      httpStatus: r.status,
-      detail: j?.chart?.error?.description || `HTTP ${r.status}`,
-    });
-  }
-
-  const result = j.chart?.result?.[0];
-  const err = j.chart?.error;
-  if (err) {
-    return res.status(200).json({
-      ok: false,
-      status: 'error',
-      candles: [],
-      symbol: yahooSym,
-      source: 'yahoo',
-      detail: err.description || String(err),
-    });
-  }
-
-  if (!result) {
+  if (!fetched?.candles?.length) {
     return res.status(200).json({
       ok: true,
       status: 'no_data',
       candles: [],
-      symbol: yahooSym,
-      source: 'yahoo',
-    });
-  }
-
-  const ts = result.timestamp || [];
-  const q = result.indicators?.quote?.[0] || {};
-  const opens = q.open || [];
-  const highs = q.high || [];
-  const lows = q.low || [];
-  const closes = q.close || [];
-  const vols = q.volume || [];
-
-  const candles = [];
-  for (let i = 0; i < ts.length; i++) {
-    const o = opens[i];
-    const h = highs[i];
-    const l = lows[i];
-    const c = closes[i];
-    if (o == null && h == null && l == null && c == null) continue;
-    if (c == null && o == null) continue;
-    candles.push({
-      time: ts[i],
-      open: o != null ? +o : +c,
-      high: h != null ? +h : Math.max(+(o || c), +(c || o)),
-      low: l != null ? +l : Math.min(+(o || c), +(c || o)),
-      close: c != null ? +c : +o,
-      volume: vols[i] != null && !Number.isNaN(+vols[i]) ? +vols[i] : null,
-    });
-  }
-
-  if (candles.length === 0) {
-    return res.status(200).json({
-      ok: true,
-      status: 'no_data',
-      candles: [],
-      symbol: yahooSym,
-      source: 'yahoo',
+      symbol: usedSymbol,
+      source: 'yahoo_v8',
+      hint:
+        'Sin velas para este activo en el periodo. Prueba otro timeframe o un símbolo del catálogo (índices, acciones, divisas =X, cripto -USD).',
     });
   }
 
   return res.status(200).json({
     ok: true,
     status: 'ok',
-    candles,
-    symbol: yahooSym,
-    source: 'yahoo',
+    candles: fetched.candles,
+    symbol: usedSymbol,
+    source: 'yahoo_v8',
+    attribution:
+      'Datos orientativos vía Yahoo Finance. No es tiempo real ni asesoramiento financiero.',
   });
 }

@@ -224,7 +224,7 @@ function pctChangeFromSeries(series) {
 
 /**
  * GET ?series=1&symbol=...&days=30
- * Fuentes: Frankfurter (divisas), CoinGecko (cripto), Yahoo (acciones/índices).
+ * Fuentes: Frankfurter (divisas), CoinGecko (cripto), Yahoo Finance (acciones/índices/materias).
  */
 async function buildMarketSeries(symbol, days) {
   const def = MARKETS_UNIVERSE.find((u) => u.symbol === symbol);
@@ -248,7 +248,7 @@ async function buildMarketSeries(symbol, days) {
   let series = [];
   let source = 'none';
   let attribution =
-    'Datos orientativos. Divisas: Frankfurter (tipos ECB). Cripto: CoinGecko. Acciones/índices: Yahoo Finance.';
+    'Datos orientativos. Divisas: Frankfurter (tipos ECB). Cripto: CoinGecko.';
 
   if (def.frankfurterTo) {
     series = await fetchFrankfurterSeries(def.frankfurterTo, range);
@@ -265,7 +265,7 @@ async function buildMarketSeries(symbol, days) {
     if (series.length) {
       source = 'yahoo_v8';
       attribution =
-        'Histórico diario vía API pública de gráficos Yahoo Finance (rango aproximado al periodo); uso orientativo.';
+        'Histórico diario vía Yahoo Finance (rango aproximado al periodo); uso orientativo.';
     }
     if (!series.length && def.category === 'acciones') {
       const mc = `${def.symbol.replace(/\./g, '-')}.MC`;

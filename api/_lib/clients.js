@@ -59,11 +59,22 @@ export function getSupabaseAnon() {
 
 export function isValidCronRequest(req) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || secret === 'changeme' || secret.length < 16) {
-    console.error('❌ CRON_SECRET no está configurado o es demasiado corto');
+  if (!secret || secret === 'changeme' || secret.length < 32) {
+    console.error('❌ CRON_SECRET no está configurado o es demasiado corto (mín. 32)');
     return false;
   }
-  return (req.headers.authorization || '') === `Bearer ${secret}`;
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${secret}`) return false;
+  // Producción: cron de Vercel (x-vercel-cron) o disparo interno desde /api/admin/trigger
+  if (process.env.VERCEL === '1' && process.env.VERCEL_ENV === 'production') {
+    const fromVercelCron = req.headers['x-vercel-cron'] === '1' || req.headers['x-vercel-cron'] === 1;
+    const fromAdminTrigger = req.headers['x-lente-internal-trigger'] === '1';
+    if (!fromVercelCron && !fromAdminTrigger) {
+      console.warn('[cron] Rechazado: origen no autorizado en producción');
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Fuerza http:// para loopback (vercel dev no sirve TLS en tu máquina). */
@@ -136,11 +147,11 @@ export async function requireAdmin(req) {
     .single();
 
   if (profileErr || !profile?.is_admin) {
-    console.log(`[requireAdmin] ${user.email} no es admin`);
+    console.log('[requireAdmin] usuario sin permisos de admin');
     return null;
   }
 
-  console.log(`[requireAdmin] Admin verificado: ${user.email}`);
+  console.log('[requireAdmin] Admin verificado');
   return { ...user, profile };
 }
 

@@ -3,7 +3,7 @@
 // cripto vía CoinGecko API pública (sin clave en tier gratuito básico).
 
 export const UNIVERSE_DISCLAIMER =
-  'Divisas: tipos de referencia (ECB, Frankfurter). Cripto: CoinGecko. Índices y acciones: datos cuando la base los tiene actualizados; el gráfico es orientativo (TradingView). No es asesoramiento financiero.';
+  'Divisas: Frankfurter (ECB). Cripto: CoinGecko. Índices y acciones: Yahoo Finance / caché en base de datos. Datos orientativos, no tiempo real. No es asesoramiento financiero.';
 
 /** @typedef {{ symbol: string, name: string, description: string, category: string, tv: string, coingeckoId?: string, frankfurterTo?: string }} UniverseRow */
 
