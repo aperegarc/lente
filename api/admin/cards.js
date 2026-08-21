@@ -3,7 +3,7 @@
 // ============================================================
 
 import { getSupabaseAdmin, requireAdmin } from '../_lib/clients.js';
-import { isUuid, clampInt, sanitizeText, isIsoDate, publicError } from '../_lib/validate.js';
+import { isUuid, clampInt, sanitizeText, isIsoDate, publicError, QUERY_LIMITS } from '../_lib/validate.js';
 
 const ALLOWED_UPDATE_FIELDS = [
   'headline',
@@ -18,7 +18,7 @@ const ALLOWED_UPDATE_FIELDS = [
   'is_ai_generated',
 ];
 
-const FIELD_LIMITS = {
+export const FIELD_LIMITS = {
   headline: 500,
   deck: 800,
   body: 12000,
@@ -64,6 +64,14 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const { action, id, updates } = req.body || {};
+    try {
+      const rawSize = JSON.stringify(req.body || {}).length;
+      if (rawSize > QUERY_LIMITS.jsonBodyBytes) {
+        return publicError(res, 413, 'Body demasiado grande');
+      }
+    } catch {
+      return publicError(res, 400, 'JSON inválido');
+    }
 
     if (!isUuid(id)) {
       return publicError(res, 400, 'id inválido');

@@ -8,6 +8,8 @@ import {
   MARKETS_UNIVERSE,
   UNIVERSE_DISCLAIMER,
 } from './_lib/markets-universe.js';
+import { rateLimitRoute } from './_lib/rate-limit.js';
+import { QUERY_LIMITS, firstQuery, sanitizeText, clampInt } from './_lib/validate.js';
 
 /**
  * Histórico vía API pública de gráficos Yahoo (v8). Mismo tipo de dato que usan muchas apps;
@@ -327,10 +329,18 @@ async function buildUniverseResponse(supabase) {
 }
 
 export default async function handler(req, res) {
+  if (req.method && req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
+    return res.status(405).json({ error: 'Método no permitido' });
+  }
+
+  if (!(await rateLimitRoute(req, res, { max: 30, adminMax: 120, name: 'markets' }))) {
+    return;
+  }
+
   if (req.query.series === '1') {
-    const symbol =
-      typeof req.query.symbol === 'string' ? req.query.symbol.trim() : '';
-    const days = parseInt(String(req.query.days || '30'), 10) || 30;
+    const symbol = sanitizeText(firstQuery(req.query.symbol), QUERY_LIMITS.symbol) || '';
+    const days = clampInt(req.query.days, 7, 730, 30);
     if (!symbol) {
       return res.status(400).json({ error: 'Falta query symbol' });
     }
@@ -372,7 +382,7 @@ export default async function handler(req, res) {
     }
   }
 
-  const { category } = req.query;
+  const category = sanitizeText(firstQuery(req.query.category), QUERY_LIMITS.category) || '';
 
   let query = supabase.from('markets').select('*');
   if (category) query = query.eq('category', category);

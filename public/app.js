@@ -49,6 +49,8 @@ const CHART_TF = {
   '1D': { rangeSec: 86400, resolution: '15' },
   '1W': { rangeSec: 86400 * 7, resolution: '60' },
   '1M': { rangeSec: 86400 * 30, resolution: 'D' },
+  '3M': { rangeSec: 86400 * 90, resolution: 'D' },
+  '1Y': { rangeSec: 86400 * 365, resolution: 'D' },
 };
 
 const TRADINGVIEW_MAP = {
@@ -485,15 +487,17 @@ function renderMarkets() {
       if (m.price > 1000) priceDigits = 0;
       else if (m.symbol?.includes('EUR') || m.category === 'divisas') priceDigits = 4;
       else if (m.category === 'cripto' && m.price != null && m.price < 1) priceDigits = 4;
-      const tvSymbol = m.tv || TRADINGVIEW_MAP[m.symbol] || m.symbol;
-      const dsym = escapeAttr(tvSymbol);
+      const chartSymbol = String(m.symbol || '').trim() || m.tv || TRADINGVIEW_MAP[m.symbol] || '';
+      const dsym = escapeAttr(chartSymbol);
       const dname = escapeAttr(m.name);
+      const spark = sparklineSvg(m.sparkline, cls);
       html += `
         <div class="market-item" role="button" tabindex="0" data-chart="${dsym}" data-name="${dname}">
           <div class="market-item-left">
             <div class="market-item-name">${escapeHtml(m.name)}</div>
             <div class="market-item-desc">${escapeHtml(m.description || '')}</div>
           </div>
+          ${spark ? `<div class="market-item-mid">${spark}</div>` : ''}
           <div class="market-item-right">
             <div class="market-price">${m.price != null && !Number.isNaN(+m.price) ? `${prefix}${fmtNum(m.price, priceDigits)}` : '–'}</div>
             <div class="market-change ${cls}">${m.change_pct != null && !Number.isNaN(+m.change_pct) ? fmtPct(m.change_pct) : '–'}</div>
@@ -526,6 +530,28 @@ function renderMarkets() {
 function setMarketTab(tab) {
   state.currentMarketTab = tab;
   renderMarkets();
+}
+
+function sparklineSvg(raw, cls) {
+  let pts = raw;
+  if (typeof pts === 'string') {
+    try { pts = JSON.parse(pts); } catch { return ''; }
+  }
+  if (!Array.isArray(pts) || pts.length < 2) return '';
+  const nums = pts.map(Number).filter((n) => Number.isFinite(n));
+  if (nums.length < 2) return '';
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const span = max - min || 1;
+  const w = 56;
+  const h = 22;
+  const d = nums.map((v, i) => {
+    const x = (i / (nums.length - 1)) * w;
+    const y = h - ((v - min) / span) * (h - 2) - 1;
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const tone = cls === 'down' ? 'var(--red)' : cls === 'up' ? 'var(--green)' : 'var(--ink-muted)';
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="${d}" fill="none" stroke="${tone}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
 function hideChartScreen() {
@@ -603,7 +629,7 @@ function loadEchartsScript() {
   if (window.echarts) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js';
+    script.src = '/vendor/echarts.min.js';
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error('No se pudo cargar ECharts'));
@@ -634,6 +660,9 @@ async function refreshChartData() {
     const res = await fetch(url);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (res.status === 429) {
+        throw new Error('Demasiadas peticiones. Espera un momento e inténtalo de nuevo.');
+      }
       const parts = [data.error, data.detail, data.hint].filter(Boolean);
       throw new Error(parts.length ? parts.join(' · ') : `Error ${res.status}`);
     }
@@ -1380,8 +1409,8 @@ function showTab(mode) {
 async function submitLogin() {
   try {
     await waitForSupabase();
-    const email = $('login-email').value.trim();
-    const password = $('login-password').value;
+    const email = $('login-email').value.trim().slice(0, 254);
+    const password = $('login-password').value.slice(0, 128);
     if (!email.includes('@')) { $('login-status').textContent = 'Email inválido'; return; }
     if (!password || password.length < 6) { $('login-status').textContent = 'Mínimo 6 caracteres'; return; }
     $('login-status').textContent = loginMode === 'login' ? 'Entrando...' : 'Creando...';
@@ -1515,12 +1544,26 @@ async function startApp() {
   }
 }
 
+function bindCookieBanner() {
+  const el = $('cookie-banner');
+  if (!el) return;
+  try {
+    if (localStorage.getItem('lente.cookies-ack') === '1') return;
+  } catch (_) { /* mostrar */ }
+  el.hidden = false;
+  $('cookie-accept')?.addEventListener('click', () => {
+    try { localStorage.setItem('lente.cookies-ack', '1'); } catch (_) { /* noop */ }
+    el.hidden = true;
+  });
+}
+
 async function init() {
-  console.log('🚀 Inicializando app v26...');
+  console.log('🚀 Inicializando app v27...');
   if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';
   }
   scrollFeedToStart();
+  bindCookieBanner();
   bindChartPage();
   initChartRoute();
   await initAuth();
@@ -1531,7 +1574,7 @@ async function init() {
   syncInstallBannerCopy();
   await handleCheckoutReturn();
   appReady = true;
-  console.log('✅ App v26 lista');
+  console.log('✅ App v27 lista');
 }
 
 if (document.readyState === 'loading') {

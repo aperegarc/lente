@@ -1,4 +1,4 @@
-const VERSION = 'lente-v5';
+const VERSION = 'lente-v6';
 const CORE_ASSETS = [
   '/',
   '/index.html',

@@ -57,7 +57,14 @@
           <div id="feed-list"></div>
           <div class="feed-slide feed-slide--legal">
             <footer class="app-legal-bar" role="contentinfo">
-              <p><strong>Aviso legal.</strong> Lente utiliza inteligencia artificial para sintetizar actualidad financiera. La información se ofrece con fines educativos y de agregación de noticias. No constituye asesoramiento financiero, recomendación de inversión ni gestión de instrumentos financieros según la normativa aplicable en España (incl. orientaciones de la CNMV). Consulta siempre fuentes y, si procede, a un profesional autorizado.</p>
+              <p><strong>Aviso.</strong> Contenido informativo elaborado con asistencia de IA. No constituye asesoramiento financiero ni recomendación de inversión (CNMV). Consulta fuentes y, si procede, a un profesional autorizado.</p>
+              <nav class="legal-links" aria-label="Información legal">
+                <a href="/aviso-legal">Aviso legal</a>
+                <a href="/privacidad">Privacidad</a>
+                <a href="/cookies">Cookies</a>
+                <a href="/terminos">Términos</a>
+                <a href="/transparencia-ia">Transparencia IA</a>
+              </nav>
             </footer>
           </div>
         </div>
@@ -122,11 +129,13 @@
             <button type="button" class="chart-tf-btn active" data-tf="1D" role="tab" aria-selected="true">1D</button>
             <button type="button" class="chart-tf-btn" data-tf="1W" role="tab" aria-selected="false">1W</button>
             <button type="button" class="chart-tf-btn" data-tf="1M" role="tab" aria-selected="false">1M</button>
+            <button type="button" class="chart-tf-btn" data-tf="3M" role="tab" aria-selected="false">3M</button>
+            <button type="button" class="chart-tf-btn" data-tf="1Y" role="tab" aria-selected="false">1Y</button>
           </div>
           <div id="chart-page-loading" class="chart-page-loading">Cargando velas…</div>
           <div id="chart-page-error" class="chart-page-error" hidden></div>
           <div id="chart-page-container" class="chart-page-container"></div>
-          <p class="chart-data-foot">Datos: <strong>Yahoo Finance</strong> (orientativo) · Gráfico: Apache ECharts</p>
+          <p class="chart-data-foot">Datos orientativos (Yahoo Finance). No es tiempo real ni asesoramiento financiero.</p>
         </div>
       </section>
 
@@ -180,11 +189,11 @@
         </div>
         <div class="field">
           <label class="field-label">Email</label>
-          <input type="email" id="login-email" placeholder="tu@email.com" />
+          <input type="email" id="login-email" placeholder="tu@email.com" maxlength="254" autocomplete="email" />
         </div>
         <div class="field" id="login-password-field">
           <label class="field-label">Contraseña</label>
-          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+          <input type="password" id="login-password" placeholder="••••••••" maxlength="128" autocomplete="current-password" />
         </div>
         <p class="login-forgot-row" id="login-forgot-row" style="margin:0 0 14px;font-size:13px;">
           <button type="button" class="link-text-btn" id="login-forgot-btn" onclick="showForgotPassword()">¿Olvidaste tu contraseña?</button>
@@ -209,11 +218,11 @@
         <p style="font-size:13px;color:var(--ink-dim);line-height:1.45;margin:0 0 16px;">Elige una contraseña nueva. Tras guardar podrás usarla para entrar.</p>
         <div class="field">
           <label class="field-label">Nueva contraseña</label>
-          <input type="password" id="recovery-password" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+          <input type="password" id="recovery-password" placeholder="Mínimo 6 caracteres" maxlength="128" autocomplete="new-password" />
         </div>
         <div class="field">
           <label class="field-label">Confirmar</label>
-          <input type="password" id="recovery-password-2" placeholder="Repite la contraseña" autocomplete="new-password" />
+          <input type="password" id="recovery-password-2" placeholder="Repite la contraseña" maxlength="128" autocomplete="new-password" />
         </div>
         <button type="button" class="cta" onclick="submitNewPassword()" style="width:100%;">Guardar contraseña</button>
         <p id="recovery-status" class="login-status" style="margin-top:12px;"></p>
@@ -244,6 +253,11 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="cookie-banner" id="cookie-banner" hidden>
+    <p>Usamos cookies técnicas para la sesión (Supabase) y el funcionamiento de la app. No hay analítica activa. <a href="/cookies">Política de cookies</a></p>
+    <button type="button" class="cookie-banner-ok" id="cookie-accept">Entendido</button>
+  </div>
 
   <script src="/vendor/supabase.js"></script>
   <script src="/api/public-config"></script>

@@ -3,6 +3,19 @@
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export const QUERY_LIMITS = {
+  symbol: 64,
+  category: 80,
+  jsonBodyBytes: 32_768,
+};
+
+/** Primer valor de query (Vercel puede pasar arrays). */
+export function firstQuery(value) {
+  if (Array.isArray(value)) return firstQuery(value[0]);
+  if (value == null) return '';
+  return String(value);
+}
+
 export function isUuid(value) {
   return typeof value === 'string' && UUID_RE.test(value.trim());
 }

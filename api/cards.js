@@ -2,6 +2,7 @@
 
 import { getSupabaseAdmin, getUserFromToken } from './_lib/clients.js';
 import { isUuid, publicError } from './_lib/validate.js';
+import { rateLimit } from './_lib/rate-limit.js';
 
 const PUBLIC_CARD_FIELDS =
   'id, category, headline, deck, body, meaning, sources_text, primary_source_url, legal_tag, is_ai_generated, read_time_seconds, edition_date, order_index, published_at';
@@ -18,6 +19,9 @@ export default async function handler(req, res) {
   res.setHeader('Vary', 'Authorization');
 
   const userCtx = await getUserFromToken(req);
+  const isAdmin = userCtx?.profile?.is_admin === true;
+  if (!rateLimit(req, res, { max: isAdmin ? 80 : 20, name: 'cards' })) return;
+
   if (!userCtx?.id) {
     return publicError(res, 401, 'Inicia sesión');
   }

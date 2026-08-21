@@ -186,6 +186,22 @@
       cursor: pointer;
     }
 
+    .admin-legal-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .admin-legal-links a {
+      color: var(--ink-muted);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+    }
+    .admin-legal-links a:hover { color: var(--accent); }
+
     .auth-logout:hover {
       color: var(--red);
       border-color: var(--red);
@@ -836,12 +852,12 @@
       <p class="login-help">Solo para editores. Puedes entrar con enlace mágico o con email + contraseña.</p>
       <div class="field">
         <label>Tu email</label>
-        <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" />
+        <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" maxlength="254" />
       </div>
       <div class="field">
         <label>Contraseña (opcional)</label>
         <input type="password" id="login-password" placeholder="Tu contraseña de Supabase"
-          autocomplete="current-password" />
+          autocomplete="current-password" maxlength="128" />
         <div class="field-hint">Si no tienes contraseña, usa "Enviar enlace de acceso".</div>
       </div>
       <div style="display:flex; gap:10px;">
@@ -929,6 +945,13 @@
         <div class="auth-email" id="session-email">—</div>
         <button class="auth-logout" onclick="logout()">Cerrar sesión</button>
       </div>
+      <nav class="admin-legal-links" aria-label="Información legal">
+        <a href="/aviso-legal">Aviso legal</a>
+        <a href="/privacidad">Privacidad</a>
+        <a href="/cookies">Cookies</a>
+        <a href="/terminos">Términos</a>
+        <a href="/transparencia-ia">IA</a>
+      </nav>
     </aside>
 
     <!-- Main -->
@@ -1012,27 +1035,27 @@
         </div>
         <div class="field">
           <label>Titular</label>
-          <input type="text" id="edit-headline" />
+          <input type="text" id="edit-headline" maxlength="500" />
           <div class="field-hint">Máx 12 palabras. Rodea palabras con &lt;em&gt;así&lt;/em&gt; para ponerlas en cursiva
             dorada.</div>
         </div>
         <div class="field">
           <label>Deck (resumen de 1-2 líneas)</label>
-          <textarea id="edit-deck"></textarea>
+          <textarea id="edit-deck" maxlength="800"></textarea>
         </div>
         <div class="field">
           <label>Cuerpo (Qué ha pasado)</label>
-          <textarea id="edit-body" style="min-height:130px;"></textarea>
+          <textarea id="edit-body" maxlength="12000" style="min-height:130px;"></textarea>
           <div class="field-hint">Máx 80 palabras. Sin jerga sin explicar.</div>
         </div>
         <div class="field">
           <label>¿Qué significa para ti?</label>
-          <textarea id="edit-meaning"></textarea>
+          <textarea id="edit-meaning" maxlength="4000"></textarea>
           <div class="field-hint">Máx 60 palabras. Conecta con hipoteca/ahorro/inversión en España.</div>
         </div>
         <div class="field">
           <label>Fuentes</label>
-          <input type="text" id="edit-sources" />
+          <input type="text" id="edit-sources" maxlength="500" />
           <div class="field-hint">Formato: "Reuters · FT · Bloomberg"</div>
         </div>
         <div class="field">
@@ -1072,8 +1095,9 @@
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: true,
-          // pkce: mejor para password + magic link en local
           flowType: 'pkce',
+          // Evita cuelgues en "Iniciando sesión..." por navigator.locks (pestañas/PWA)
+          lock: async (_name, _acquireTimeout, fn) => fn(),
         },
       });
       return supabaseClient;
@@ -1111,7 +1135,7 @@
 
     async function sendPasswordRecovery() {
       const client = getSupabaseClient();
-      const email = $('login-email').value.trim();
+      const email = $('login-email').value.trim().slice(0, 254);
       const status = $('login-status');
       if (!email.includes('@')) {
         status.className = 'login-status show error';
@@ -1135,8 +1159,8 @@
 
     async function submitAdminRecoveryPassword() {
       const client = getSupabaseClient();
-      const p1 = $('admin-recovery-p1').value;
-      const p2 = $('admin-recovery-p2').value;
+      const p1 = $('admin-recovery-p1').value.slice(0, 128);
+      const p2 = $('admin-recovery-p2').value.slice(0, 128);
       const status = $('login-status');
       if (!p1 || p1.length < 6) {
         status.className = 'login-status show error';
@@ -1223,7 +1247,7 @@
     async function sendMagicLink() {
       const client = getSupabaseClient();
       setAdminRecoveryActive(false);
-      const email = $('login-email').value.trim();
+      const email = $('login-email').value.trim().slice(0, 254);
       const status = $('login-status');
 
       if (!email.includes('@')) {
@@ -1253,8 +1277,8 @@
     async function signInWithPassword() {
       const client = getSupabaseClient();
       setAdminRecoveryActive(false);
-      const email = $('login-email').value.trim();
-      const password = $('login-password').value;
+      const email = $('login-email').value.trim().slice(0, 254);
+      const password = $('login-password').value.slice(0, 128);
       const status = $('login-status');
 
       if (!email.includes('@')) {
@@ -1271,7 +1295,28 @@
       status.className = 'login-status show';
       status.textContent = 'Iniciando sesión...';
 
-      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      let data;
+      let error;
+      try {
+        const result = await Promise.race([
+          client.auth.signInWithPassword({ email, password }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('TIMEOUT_LOGIN')), 15000),
+          ),
+        ]);
+        data = result.data;
+        error = result.error;
+      } catch (err) {
+        status.className = 'login-status show error';
+        if (String(err?.message || '') === 'TIMEOUT_LOGIN') {
+          status.textContent =
+            'El login no respondió (15s). Cierra otras pestañas de lente/admin, Ctrl+F5 y prueba de nuevo.';
+        } else {
+          status.textContent = err.message || 'Error al iniciar sesión';
+        }
+        return;
+      }
+
       if (error) {
         status.className = 'login-status show error';
         const msg = String(error.message || '');
@@ -1558,12 +1603,12 @@
           action: 'update',
           id: state.editingId,
           updates: {
-            category: $('edit-category').value,
-            headline: $('edit-headline').value,
-            deck: $('edit-deck').value,
-            body: $('edit-body').value,
-            meaning: $('edit-meaning').value,
-            sources_text: $('edit-sources').value,
+            category: $('edit-category').value.slice(0, 80),
+            headline: $('edit-headline').value.slice(0, 500),
+            deck: $('edit-deck').value.slice(0, 800),
+            body: $('edit-body').value.slice(0, 12000),
+            meaning: $('edit-meaning').value.slice(0, 4000),
+            sources_text: $('edit-sources').value.slice(0, 500),
             read_time_seconds: parseInt($('edit-read-time').value) || 40,
           },
         });

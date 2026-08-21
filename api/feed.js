@@ -3,7 +3,8 @@
 // ============================================================
 
 import { getSupabaseAdmin, getUserFromToken } from './_lib/clients.js';
-import { isIsoDate } from './_lib/validate.js';
+import { isIsoDate, firstQuery, sanitizeText, QUERY_LIMITS } from './_lib/validate.js';
+import { rateLimit } from './_lib/rate-limit.js';
 
 const FREE_CARD_LIMIT = 5;
 
@@ -23,9 +24,11 @@ export default async function handler(req, res) {
 
   const userCtx = await getUserFromToken(req);
   const premium = userCtx?.profile?.plan === 'premium';
+  const isAdmin = userCtx?.profile?.is_admin === true;
+  if (!rateLimit(req, res, { max: isAdmin ? 180 : 60, name: 'feed' })) return;
 
-  const { category, edition_date: editionDateRaw } = req.query;
-  const editionDateParam = typeof editionDateRaw === 'string' ? editionDateRaw.trim() : '';
+  const category = sanitizeText(firstQuery(req.query.category), QUERY_LIMITS.category) || '';
+  const editionDateParam = firstQuery(req.query.edition_date).trim();
 
   const { data: latestRows } = await supabase
     .from('cards')

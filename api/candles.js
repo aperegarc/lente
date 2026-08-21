@@ -8,6 +8,8 @@ import {
   yahooSymbolFallbacks,
   fetchYahooCandles,
 } from './_lib/yahoo-chart.js';
+import { rateLimitRoute } from './_lib/rate-limit.js';
+import { QUERY_LIMITS, firstQuery, sanitizeText } from './_lib/validate.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
@@ -17,18 +19,26 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  let symbol = req.query.symbol;
-  const resolution = String(req.query.resolution || '60');
+  if (!(await rateLimitRoute(req, res, { max: 10, adminMax: 60, name: 'candles' }))) {
+    return;
+  }
+
+  let symbol = firstQuery(req.query.symbol);
+  const resolution = String(req.query.resolution || '60').slice(0, 8);
   const from = Number(req.query.from);
   const to = Number(req.query.to);
 
-  if (symbol == null || symbol === '') {
+  if (!symbol) {
     return res.status(400).json({ error: 'Falta symbol' });
   }
   try {
-    symbol = decodeURIComponent(String(symbol));
+    symbol = decodeURIComponent(symbol);
   } catch (_) {
     /* usar tal cual */
+  }
+  symbol = sanitizeText(symbol, QUERY_LIMITS.symbol) || '';
+  if (!symbol) {
+    return res.status(400).json({ error: 'Falta symbol' });
   }
 
   if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {

@@ -835,6 +835,7 @@ html, body {
   border-radius: 14px;
   border: 1px solid rgba(193, 200, 199, 0.35);
   box-shadow: var(--shadow-card);
+  cursor: pointer;
 }
 .market-item:last-child { margin-bottom: 0; }
 
@@ -1007,6 +1008,143 @@ html, body {
 .app-legal-bar strong {
   color: var(--ink);
   font-weight: 700;
+}
+
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+.legal-links a {
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+.legal-links a:hover { text-decoration: underline; }
+
+.cookie-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: min(516px, calc(100% - 24px));
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid rgba(193, 200, 199, 0.55);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(15, 45, 46, 0.12);
+}
+.cookie-banner[hidden] { display: none; }
+.cookie-banner p {
+  margin: 0;
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+.cookie-banner a {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+.cookie-banner-ok {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--brand-ink);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+html.legal-doc,
+body.legal-doc {
+  overflow: auto;
+  height: auto;
+  min-height: 100vh;
+  background: var(--bg);
+}
+.legal-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+.legal-head {
+  margin-bottom: 28px;
+}
+.legal-head .logo {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--brand-ink);
+  text-decoration: none;
+}
+.legal-kicker {
+  margin-top: 8px;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.55rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+.legal-body {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink-dim);
+}
+.legal-body h2 {
+  margin: 28px 0 8px;
+  font-size: 1.05rem;
+  color: var(--brand-ink);
+}
+.legal-body p,
+.legal-body ul { margin: 0 0 12px; }
+.legal-body ul { padding-left: 1.2em; }
+.legal-body li { margin-bottom: 6px; }
+.legal-body a { color: var(--accent-strong); }
+.legal-body code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.88em;
+}
+.legal-titular {
+  margin: 0 0 22px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px dashed rgba(43, 103, 105, 0.45);
+  background: rgba(209, 231, 221, 0.45);
+}
+.legal-titular strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--brand-ink);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.legal-titular p {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--ink);
+}
+.legal-foot {
+  margin-top: 36px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(193, 200, 199, 0.45);
+}
+.legal-note {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 16px;
 }
 
 /* ===== Animación ===== */

@@ -23,14 +23,14 @@ CREATE TABLE IF NOT EXISTS sources (
 );
 
 INSERT INTO sources (name, url, language, weight) VALUES
-  ('Expansión',       'https://e00-expansion.uecdn.es/rss/portada.xml',           'es', 1.2),
-  ('El Economista',   'https://www.eleconomista.es/rss/rss-mercados.php',          'es', 1.1),
-  ('Cinco Días',      'https://cincodias.elpais.com/rss/economia.xml',             'es', 1.1),
-  ('Reuters Biz',     'https://feeds.reuters.com/reuters/businessNews',            'en', 1.3),
-  ('Financial Times', 'https://www.ft.com/rss/home',                               'en', 1.3),
-  ('Bloomberg Mkts',  'https://feeds.bloomberg.com/markets/news.rss',              'en', 1.2),
-  ('CNBC',            'https://www.cnbc.com/id/100003114/device/rss/rss.html',     'en', 1.0),
-  ('BBC Business',    'https://feeds.bbci.co.uk/news/business/rss.xml',            'en', 1.0)
+  ('Expansión',             'https://e00-expansion.uecdn.es/rss/portada.xml',                                      'es', 1.2),
+  ('El País Economía',      'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/economia/portada',   'es', 1.1),
+  ('Cinco Días',            'https://feeds.elpais.com/mrss-s/pages/ep/site/cincodias.elpais.com/portada',           'es', 1.1),
+  ('The Guardian Business', 'https://www.theguardian.com/business/rss',                                           'en', 1.2),
+  ('Financial Times',       'https://www.ft.com/rss/home',                                                        'en', 1.3),
+  ('Bloomberg Mkts',        'https://feeds.bloomberg.com/markets/news.rss',                                        'en', 1.2),
+  ('CNBC',                  'https://www.cnbc.com/id/100003114/device/rss/rss.html',                               'en', 1.0),
+  ('BBC Business',          'https://feeds.bbci.co.uk/news/business/rss.xml',                                      'en', 1.0)
 ON CONFLICT (url) DO NOTHING;
 
 -- ============================================================

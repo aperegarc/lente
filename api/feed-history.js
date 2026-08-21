@@ -3,6 +3,7 @@
 // ============================================================
 
 import { getSupabaseAnon, getUserFromToken } from './_lib/clients.js';
+import { rateLimit } from './_lib/rate-limit.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -13,6 +14,9 @@ export default async function handler(req, res) {
   res.setHeader('Vary', 'Authorization');
 
   const userCtx = await getUserFromToken(req);
+  const isAdmin = userCtx?.profile?.is_admin === true;
+  if (!rateLimit(req, res, { max: isAdmin ? 180 : 60, name: 'feed-history' })) return;
+
   if (!userCtx || userCtx.profile?.plan !== 'premium') {
     return res.status(403).json({
       error: 'premium_required',
