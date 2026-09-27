@@ -55,6 +55,11 @@
     { "source": "/terminos", "destination": "/legal/terminos.html" },
     { "source": "/transparencia-ia", "destination": "/legal/ia.html" },
     { "source": "/chart/:path*", "destination": "/index.html" },
+    { "source": "/api/admin/me", "destination": "/api/admin?op=me" },
+    { "source": "/api/admin/cards", "destination": "/api/admin?op=cards" },
+    { "source": "/api/admin/trigger", "destination": "/api/admin?op=trigger" },
+    { "source": "/api/admin/clear-cache", "destination": "/api/admin?op=clear-cache" },
+    { "source": "/api/health", "destination": "/api/admin?op=health" },
     { "source": "/api/cron/ingest", "destination": "/api/crons?job=ingest" },
     { "source": "/api/cron/generate", "destination": "/api/crons?job=generate" },
     { "source": "/api/cron/markets", "destination": "/api/crons?job=markets" }

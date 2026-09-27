@@ -47,7 +47,7 @@ describe('vercel.json', () => {
     for (const c of vercel.crons) assert.ok(sources.has(c.path), c.path);
   });
 
-  test('máximo 12 funciones serverless (plan Hobby)', { todo: 'hay 14; api/crons.js indica que el límite Hobby es 12' }, () => {
+  test('máximo 12 funciones serverless (plan Hobby)', () => {
     const fns = listJs('api').filter((f) => !f.includes(`${path.sep}_lib${path.sep}`));
     assert.ok(fns.length <= 12, `hay ${fns.length}: ${fns.join(', ')}`);
   });
@@ -96,15 +96,11 @@ describe('configuración', () => {
     }
   });
 
-  test(
-    '/api/health y los crons piden la misma longitud mínima de CRON_SECRET',
-    { todo: 'health acepta ≥10 caracteres, isValidCronRequest exige ≥32' },
-    () => {
-      const health = read('api/health.js').match(/val\.length < (\d+)/)[1];
-      const cron = read('api/_lib/clients.js').match(/secret\.length < (\d+)/)[1];
-      assert.equal(health, cron);
-    },
-  );
+  test('/api/health y los crons piden la misma longitud mínima de CRON_SECRET', () => {
+    const health = read('api/admin.js').match(/CRON_SECRET' \? (\d+)/)[1];
+    const cron = read('api/_lib/clients.js').match(/secret\.length < (\d+)/)[1];
+    assert.equal(health, cron);
+  });
 
   test('.env.local está ignorado por git', () => {
     assert.match(read('.gitignore'), /^\.env\.local$/m);

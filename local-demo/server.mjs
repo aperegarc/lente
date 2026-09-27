@@ -83,13 +83,19 @@ function handleApi(route, query, req, res) {
       }
       res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(publicConfig(origin));
-    case '/api/health':
-      return sendJson(res, 200, {
-        environment: 'local-demo',
-        ready: true,
-        mode: 'demo',
-        note: 'Servidor de demostración: sin Supabase, Anthropic ni Stripe. Datos simulados.',
-        errors: [],
+    case '/api/admin':
+      if (query.get('op') === 'health') {
+        return sendJson(res, 200, {
+          environment: 'local-demo',
+          ready: true,
+          mode: 'demo',
+          note: 'Servidor de demostración: sin Supabase, Anthropic ni Stripe. Datos simulados.',
+          errors: [],
+        });
+      }
+      return sendJson(res, 501, {
+        error: 'No disponible en modo demo',
+        detail: `${route} necesita Supabase/Anthropic/Stripe (usa \`npm run dev\` con .env.local).`,
       });
     case '/api/feed':
       return sendJson(res, 200, feedPayload({

@@ -30,10 +30,10 @@ Ninguno de los tres necesita `npm install`.
 | `madrid-day.js` | fecha de Madrid, horario de verano e invierno, días de cambio de hora | 5/5 |
 | `yahoo-chart.js` | mapeo de símbolos, intervalos, fallback `.MC` | 3/4 |
 | Catálogo de mercados | símbolos únicos, categorías, ids de CoinGecko/Frankfurter | 2/2 |
-| `vercel.json` | rewrites apuntan a archivos existentes, crons enrutados, límite de funciones | 2/3 |
+| `vercel.json` | rewrites apuntan a archivos existentes, crons enrutados, máximo 12 funciones Hobby | 3/3 |
 | PWA | assets del service worker e iconos del manifest existen | 2/2 |
 | Categorías | coherencia entre la IA (`generate.js`) y la app (`app.js`) | 1/3 |
-| Configuración | `.env.example`, `.gitignore`, criterio de `CRON_SECRET` | 2/3 |
+| Configuración | `.env.example`, `.gitignore`, criterio de `CRON_SECRET` | 3/3 |
 | Servidor demo (integración HTTP) | páginas, rewrites, legal, APIs, validación de parámetros, path traversal | 14/14 |
 | Seguridad (`security.test.mjs`) | el límite de peticiones cuenta antes de validar tokens (tokens falsos no llegan a Supabase Auth), cupo de admin acotado, secreto del cron en tiempo constante, caché CDN del feed solo para anónimos y nunca para 429, sin mensajes internos en respuestas públicas, timeouts en APIs externas | 10/10 |
 | Sesión (`/api/session`) | cookie HttpOnly de 400 días, lectura, borrado, origen ajeno 403, token inválido 400 | 7/7 |
@@ -47,12 +47,10 @@ Ninguno de los tres necesita `npm install`.
 Ordenados por impacto:
 
 1. **Ámbitos desincronizado con las categorías de la IA.** `generate.js` genera «Política monetaria», «Materias primas» y «Macro Europa», que no tienen Ámbito, así que esas noticias no se pueden filtrar. Al revés, «Inmobiliario» y «Laboral» aparecen en Ámbitos pero la IA nunca las genera: siempre marcan «0 hoy».
-2. **14 funciones serverless.** `api/crons.js` dice que el plan Hobby de Vercel admite 12. Si ese límite sigue vigente en tu cuenta, el despliegue fallará o habrá que agrupar rutas (p. ej. `admin/*` en una sola función, como ya se hizo con los crons).
-3. **Gráficos de acciones españolas.** La app pide `SAN`, `BBVA`… a Yahoo; `SAN` y `BBVA` existen en NYSE (ADR en dólares), así que el gráfico no es el de la Bolsa de Madrid. El fallback a `.MC` solo actúa si no hay datos.
-4. **`CRON_SECRET`: `/api/health` da por buena una clave de 10 caracteres**, pero `isValidCronRequest` exige 32. Health puede decir `ready: true` y los crons rechazar todas las llamadas.
-5. **El ticker de «Hoy» sale vacío** hasta que el usuario entra en Mercados (`loadMarkets` solo se llama al cambiar de pestaña). Se ve en el vídeo.
-6. **`isIsoDate` acepta fechas imposibles** (`2026-13-45`). Bajo impacto: Supabase devolvería error o vacío.
-7. **Límite de 10 peticiones/min en `/api/candles`.** Un usuario que cambia periodos y activos agota el cupo en segundos y ve «Demasiadas peticiones».
+2. **Gráficos de acciones españolas.** La app pide `SAN`, `BBVA`… a Yahoo; `SAN` y `BBVA` existen en NYSE (ADR en dólares), así que el gráfico no es el de la Bolsa de Madrid. El fallback a `.MC` solo actúa si no hay datos.
+3. **El ticker de «Hoy» sale vacío** hasta que el usuario entra en Mercados (`loadMarkets` solo se llama al cambiar de pestaña). Se ve en el vídeo.
+4. **`isIsoDate` acepta fechas imposibles** (`2026-13-45`). Bajo impacto: Supabase devolvería error o vacío.
+5. **Límite de 10 peticiones/min en `/api/candles`.** Un usuario que cambia periodos y activos agota el cupo en segundos y ve «Demasiadas peticiones».
 
 ## Documentación desactualizada
 
