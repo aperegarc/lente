@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#F8F9FA">
   <title>Cookies · lente</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/fonts/app.css">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="legal-doc">
@@ -24,7 +22,9 @@
       <p>lente solo utiliza cookies y almacenamientos <strong>técnicos</strong> necesarios para que el Servicio funcione. No hay analítica activa ni cookies de publicidad.</p>
       <h2>1. Qué usamos</h2>
       <ul>
-        <li><strong>Sesión de Supabase Auth:</strong> cookies o almacenamiento local para mantener el inicio de sesión (email y, en su caso, plan).</li>
+        <li><strong>Sesión de Supabase Auth:</strong> almacenamiento local para mantener el inicio de sesión (email y, en su caso, plan).</li>
+        <li><strong><code>lente_session</code></strong> (cookie técnica, propia, <em>HttpOnly</em>, hasta 400 días): guarda el token de renovación de tu sesión para que no tengas que volver a entrar aunque el navegador borre el almacenamiento local. Se elimina al cerrar sesión.</li>
+        <li><strong>Mercados favoritos:</strong> un valor en <code>localStorage</code> (<code>lente.market-favs</code>) con los mercados que marcas con la estrella; si has iniciado sesión, también se guarda en tu perfil.</li>
         <li><strong>PWA / service worker:</strong> caché de recursos estáticos para uso offline básico y reinstalación de la app.</li>
         <li><strong>Preferencia del aviso de cookies:</strong> un valor en <code>localStorage</code> (<code>lente.cookies-ack</code>) para no repetir el banner. No es una cookie HTTP.</li>
         <li><strong>Perfil en dispositivo:</strong> copia local opcional del perfil para mostrar la UI con menos espera.</li>

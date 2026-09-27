@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>lente · Entiende la economía en 5 minutos al día</title>
+  <meta name="description" content="Las noticias económicas del día, explicadas en lenguaje llano y con lo que significan para tu bolsillo. Mercados, favoritos y gráficos claros. Gratis en tu móvil.">
+  <meta name="theme-color" content="#F8F9FA">
+  <meta property="og:title" content="lente · Entiende la economía en 5 minutos al día">
+  <meta property="og:description" content="Noticias económicas explicadas para quienes no viven pegados al mercado.">
+  <meta property="og:image" content="/media/lente-recorrido.jpg">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/fonts/app.css">
+  <link rel="preload" href="/media/lente-recorrido.mp4" as="fetch" crossorigin>
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --paper: #ffffff;
+      --ink: #0f2d2e;
+      --text: #191c1d;
+      --dim: #414848;
+      --muted: #717878;
+      --line: #e1e3e4;
+      --accent: #2b6769;
+      --mint: #d1e7dd;
+      --aqua: #c9e8e9;
+      --red: #ba1a1a;
+      --radius: 22px;
+      --serif: 'Newsreader', Georgia, serif;
+      --sans: 'Manrope', system-ui, -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+      --nav-h: 64px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    a { color: inherit; }
+    img, video { display: block; max-width: 100%; }
+    .wrap { width: min(1180px, 100% - 40px); margin: 0 auto; }
+
+    /* ---------- Navegación ---------- */
+    .nav {
+      position: fixed; inset: 0 0 auto 0; z-index: 50;
+      height: var(--nav-h);
+      display: flex; align-items: center;
+      transition: background .3s, box-shadow .3s, backdrop-filter .3s;
+    }
+    .nav.scrolled {
+      background: rgba(248, 249, 250, .82);
+      backdrop-filter: saturate(1.4) blur(14px);
+      -webkit-backdrop-filter: saturate(1.4) blur(14px);
+      box-shadow: 0 1px 0 var(--line);
+    }
+    .nav .wrap { display: flex; align-items: center; gap: 28px; }
+    .logo {
+      font-weight: 800; font-size: 1.45rem; letter-spacing: -.04em; color: var(--ink);
+      text-decoration: none; display: inline-flex; align-items: baseline;
+    }
+    .logo i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 4px; display: inline-block; }
+    .nav-links { display: flex; gap: 24px; margin-left: auto; font-size: 14px; font-weight: 600; color: var(--dim); }
+    .nav-links a { text-decoration: none; transition: color .2s; }
+    .nav-links a:hover { color: var(--ink); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      height: 46px; padding: 0 22px; border-radius: 999px;
+      font: 700 15px/1 var(--sans); text-decoration: none; cursor: pointer; border: 0;
+      transition: transform .2s, background .2s, box-shadow .2s, color .2s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--ink); color: #fff; box-shadow: 0 8px 24px -10px rgba(15, 45, 46, .55); }
+    .btn-primary:hover { background: var(--accent); }
+    .btn-ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px rgba(15, 45, 46, .22); }
+    .btn-ghost:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
+    .btn-sm { height: 38px; padding: 0 16px; font-size: 14px; }
+
+    /* ---------- Recorrido: vídeo que avanza con el scroll ---------- */
+    .story { position: relative; height: calc(var(--scenes, 9) * 140vh + 100vh); }
+    .story-sticky {
+      position: sticky; top: 0; height: 100vh; height: 100svh;
+      display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+      align-items: center; gap: 40px;
+      padding-top: var(--nav-h);
+      width: min(1180px, 100% - 40px); margin: 0 auto;
+    }
+    .story-copy { position: relative; min-height: 540px; }
+    .scene {
+      position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center;
+      opacity: 0; transform: translateY(24px);
+      transition: opacity .55s cubic-bezier(.2, .7, .2, 1), transform .55s cubic-bezier(.2, .7, .2, 1);
+      pointer-events: none;
+    }
+    .scene.on { opacity: 1; transform: none; pointer-events: auto; }
+    .scene.past { transform: translateY(-24px); }
+    .eyebrow {
+      font: 700 12px/1 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--accent);
+      display: inline-flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    }
+    .eyebrow .num { font-family: var(--mono); letter-spacing: 0; color: var(--muted); font-weight: 500; }
+    .hero-title {
+      font-family: var(--serif); font-weight: 500; color: var(--ink);
+      font-size: clamp(2.6rem, 5.6vw, 4.9rem); line-height: 1.02; letter-spacing: -.025em; margin: 0 0 22px;
+    }
+    .hero-title em { font-style: italic; color: var(--accent); }
+    .scene h2 {
+      font-family: var(--serif); font-weight: 500; color: var(--ink);
+      font-size: clamp(2.1rem, 4.2vw, 3.6rem); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 18px;
+    }
+    .scene p { font-size: clamp(1.02rem, 1.4vw, 1.2rem); color: var(--dim); max-width: 30em; margin: 0; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .hero-note { margin-top: 18px; font-size: 13px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+    .hero-note span::before { content: '✓'; color: var(--accent); font-weight: 800; margin-right: 6px; }
+    .scroll-hint {
+      margin-top: 44px; font: 600 12px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .scroll-hint b {
+      width: 22px; height: 36px; border-radius: 12px; box-shadow: inset 0 0 0 1.5px var(--muted); position: relative;
+    }
+    .scroll-hint b::after {
+      content: ''; position: absolute; left: 50%; top: 8px; width: 4px; height: 8px; margin-left: -2px;
+      border-radius: 2px; background: var(--accent); animation: wheel 1.6s ease-in-out infinite;
+    }
+    @keyframes wheel { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(12px); } }
+
+    .chapters {
+      position: absolute; left: 0; bottom: 0; display: flex; gap: 6px;
+      width: min(420px, 100%); transition: opacity .4s;
+    }
+    .chapters.hidden { opacity: 0; pointer-events: none; }
+    .chapters button {
+      flex: 1; height: 4px; border: 0; padding: 0; border-radius: 4px; cursor: pointer;
+      background: rgba(15, 45, 46, .12); position: relative; overflow: hidden;
+    }
+    .chapters button::after {
+      content: ''; position: absolute; inset: 0; background: var(--accent);
+      transform-origin: left; transform: scaleX(var(--fill, 0));
+    }
+    .chapters button::before { content: ''; position: absolute; inset: -10px 0; }
+
+    .stage { position: relative; display: flex; justify-content: center; align-items: center; height: 100%; }
+    .glow {
+      position: absolute; width: 78%; aspect-ratio: 1; border-radius: 50%;
+      background: radial-gradient(circle, rgba(201, 232, 233, .95) 0%, rgba(209, 231, 221, .55) 45%, rgba(248, 249, 250, 0) 70%);
+      filter: blur(8px); transform: scale(var(--glow, 1)); transition: transform .8s ease;
+    }
+    .phone {
+      position: relative; height: min(76vh, 760px); aspect-ratio: 390 / 844;
+      border-radius: 54px; padding: 11px; background: var(--ink);
+      box-shadow: 0 50px 90px -40px rgba(15, 45, 46, .55), 0 24px 40px -24px rgba(15, 45, 46, .35), inset 0 0 0 2px #25494a;
+      transform: perspective(1600px) rotateY(-6deg) rotateX(3deg);
+    }
+    /* Isla a escala de un iPhone real (125×37 pt a 11 pt del borde, pantalla de 390×844 pt):
+       queda sobre la barra de estado del vídeo, nunca sobre la app. */
+    .phone::before {
+      content: ''; position: absolute; top: calc(11px + 1.25%); left: 50%; width: 30%; height: 4.2%;
+      transform: translateX(-50%); border-radius: 999px; background: #0a1f20; z-index: 2;
+    }
+    .screen { position: relative; width: 100%; height: 100%; border-radius: 44px; overflow: hidden; background: #f8f9fa; }
+    .screen video, .screen img { width: 100%; height: 100%; object-fit: cover; }
+    .screen img { position: absolute; inset: 0; transition: opacity .4s; }
+    .screen.ready img { opacity: 0; }
+    .loadbar { position: absolute; left: 22%; right: 22%; bottom: 18px; height: 3px; border-radius: 3px; background: rgba(15, 45, 46, .12); overflow: hidden; z-index: 3; transition: opacity .4s; }
+    .loadbar i { position: absolute; inset: 0; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+    .screen.ready + .loadbar, .screen.ready .loadbar { opacity: 0; }
+    .float-tag {
+      position: absolute; z-index: 4; background: var(--paper); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 18px 40px -18px rgba(15, 45, 46, .45); font-size: 13px; font-weight: 700; color: var(--ink);
+      display: flex; align-items: center; gap: 8px; opacity: 0; transform: translateY(10px) scale(.96);
+      transition: opacity .5s, transform .5s;
+    }
+    .float-tag.on { opacity: 1; transform: none; }
+    .float-tag small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; }
+    .float-tag .dot { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--mint); color: var(--accent); font-size: 15px; }
+    .tag-a { left: -4%; top: 22%; }
+    .tag-b { right: -2%; top: 52%; }
+    .tag-c { left: 2%; bottom: 14%; }
+
+    /* ---------- Secciones ---------- */
+    section.block { padding: 130px 0; }
+    .kicker { font: 700 12px/1 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+    .h2 {
+      font-family: var(--serif); font-weight: 500; color: var(--ink); letter-spacing: -.02em;
+      font-size: clamp(2.2rem, 4.6vw, 3.9rem); line-height: 1.04; margin: 0 0 18px; max-width: 16em;
+    }
+    .lead { font-size: clamp(1.05rem, 1.5vw, 1.25rem); color: var(--dim); max-width: 36em; margin: 0; }
+
+    .reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s cubic-bezier(.2, .7, .2, 1), transform .8s cubic-bezier(.2, .7, .2, 1); }
+    .reveal.in { opacity: 1; transform: none; }
+    .reveal.d1 { transition-delay: .08s; } .reveal.d2 { transition-delay: .16s; } .reveal.d3 { transition-delay: .24s; } .reveal.d4 { transition-delay: .32s; }
+
+    /* Ventajas numeradas */
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0; margin-top: 70px; border-top: 1px solid var(--line); }
+    .feature { padding: 34px 26px 10px 0; }
+    .feature + .feature { padding-left: 26px; border-left: 1px solid var(--line); }
+    .feature .n { font: 500 13px/1 var(--mono); color: var(--accent); margin-bottom: 26px; display: block; }
+    .feature h3 { font: 700 1.12rem/1.3 var(--sans); color: var(--ink); margin: 0 0 10px; letter-spacing: -.01em; }
+    .feature p { margin: 0; color: var(--dim); font-size: .97rem; }
+
+    /* Antes / con lente */
+    .compare-block { padding-bottom: 40px; }
+    .compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 28px; align-items: stretch; margin-top: 56px; }
+    .compare-col { border-radius: var(--radius); padding: 30px; display: flex; flex-direction: column; }
+    .compare-col h3 { margin: 16px 0 12px; letter-spacing: -.01em; }
+    .compare-col p { margin: 0; }
+    .compare-tag { font: 700 10.5px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; }
+    .before { background: #eef0f1; color: var(--muted); }
+    .before .compare-tag { color: var(--muted); }
+    .before h3 { font: 600 1.05rem/1.4 var(--sans); color: var(--dim); }
+    .before p { font: 400 .95rem/1.6 var(--sans); }
+    .after { background: var(--paper); border: 1px solid rgba(193, 200, 199, .4); box-shadow: 0 40px 80px -48px rgba(15, 45, 46, .45); }
+    .after .compare-tag { color: var(--accent); }
+    .after h3 { font: 500 1.6rem/1.15 var(--serif); color: var(--ink); }
+    .after > p { font: 400 1.05rem/1.5 var(--serif); color: var(--dim); }
+    .compare-arrow { align-self: center; font: 400 1.6rem/1 var(--sans); color: var(--accent); }
+    .compare-cost { list-style: none; padding: 0; margin: auto 0 0; padding-top: 22px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .compare-cost li { font: 600 12px/1 var(--sans); padding: 8px 11px; border-radius: 999px; background: rgba(113, 120, 120, .12); color: var(--dim); }
+    .compare-cost.good li { background: var(--aqua); color: var(--ink); }
+    .day { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 56px; border-top: 1px solid var(--line); }
+    .day > div { padding: 26px 26px 0 0; }
+    .day > div + div { padding-left: 26px; border-left: 1px solid var(--line); }
+    .day b { display: block; font: 500 13px/1 var(--mono); color: var(--accent); margin-bottom: 12px; }
+    .day span { color: var(--dim); font-size: .97rem; }
+
+    /* Tarjeta de ejemplo */
+    .showcase { display: grid; grid-template-columns: 1fr 1fr; gap: 70px; align-items: center; }
+    .mock-card {
+      background: var(--paper); border-radius: var(--radius); padding: 28px; border: 1px solid rgba(193, 200, 199, .4);
+      box-shadow: 0 40px 80px -48px rgba(15, 45, 46, .45);
+    }
+    .chip { display: inline-block; font: 700 10.5px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; padding: 7px 10px; border-radius: 6px; background: var(--aqua); color: var(--ink); }
+    .mock-card .time { font: 500 12px/1 var(--mono); color: var(--muted); margin-left: 10px; }
+    .mock-card h4 { font: 500 1.65rem/1.15 var(--serif); color: var(--ink); margin: 16px 0 10px; letter-spacing: -.01em; }
+    .mock-card .deck { font: 400 1.05rem/1.5 var(--serif); color: var(--dim); margin: 0 0 18px; }
+    .label { font: 700 10.5px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+    .meaning { background: var(--mint); border-left: 4px solid var(--accent); border-radius: 12px; padding: 16px 18px; margin-top: 18px; }
+    .meaning .label { color: var(--ink); }
+    .meaning .label::after { display: none; }
+    .meaning p { margin: 0; font-size: .98rem; color: #1d3a3b; }
+    .sources { margin-top: 18px; font: 400 11.5px/1.4 var(--mono); color: var(--muted); }
+    .anatomy { list-style: none; padding: 0; margin: 34px 0 0; display: grid; gap: 18px; }
+    .anatomy li { display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start; }
+    .anatomy b { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); font: 500 13px/1 var(--mono); color: var(--accent); }
+    .anatomy strong { display: block; color: var(--ink); font-size: 1.02rem; }
+    .anatomy span { color: var(--dim); font-size: .95rem; }
+
+    /* Para cada lector */
+    .personas { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; margin-top: 60px; }
+    .persona {
+      background: var(--paper); border-radius: var(--radius); padding: 30px; border: 1px solid rgba(193, 200, 199, .4);
+      display: flex; flex-direction: column; gap: 20px; min-height: 320px; overflow: hidden; position: relative;
+      transition: transform .4s cubic-bezier(.2, .7, .2, 1), box-shadow .4s;
+    }
+    .persona:hover { transform: translateY(-4px); box-shadow: 0 30px 60px -40px rgba(15, 45, 46, .5); }
+    .persona h3 { font: 500 1.6rem/1.15 var(--serif); color: var(--ink); margin: 0; letter-spacing: -.01em; }
+    .persona p.sub { margin: 0; color: var(--dim); }
+    .persona .ui { margin-top: auto; }
+    .tick-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .tick { background: var(--bg); border-radius: 12px; padding: 10px 12px; min-width: 104px; }
+    .tick small { display: block; font: 600 10px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .tick b { font: 500 15px/1 var(--mono); color: var(--ink); }
+    .tick em { font: 500 11.5px/1 var(--mono); font-style: normal; display: block; margin-top: 5px; }
+    .up { color: var(--accent); } .down { color: var(--red); }
+    .star { color: #f5b80a; }
+    .spark { width: 100%; height: 70px; }
+    .persona.dark { background: var(--ink); color: #dfeaea; border-color: transparent; }
+    .persona.dark h3 { color: #fff; }
+    .persona.dark p.sub { color: #a9c3c3; }
+    .persona.dark .meaning { background: rgba(209, 231, 221, .1); border-color: #7fbfc1; }
+    .persona.dark .meaning p, .persona.dark .meaning .label { color: #e7f1f1; }
+
+    /* Precios */
+    .pricing-head { display: flex; justify-content: space-between; align-items: end; gap: 30px; flex-wrap: wrap; }
+    .toggle { display: inline-flex; background: var(--paper); border-radius: 999px; padding: 4px; box-shadow: inset 0 0 0 1px var(--line); }
+    .toggle button { border: 0; background: transparent; font: 700 14px/1 var(--sans); color: var(--dim); height: 38px; padding: 0 18px; border-radius: 999px; cursor: pointer; transition: background .25s, color .25s; }
+    .toggle button.on { background: var(--ink); color: #fff; }
+    .toggle .save { font-size: 11px; color: var(--accent); margin-left: 6px; }
+    .toggle button.on .save { color: var(--aqua); }
+    .plans { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 50px; max-width: 900px; }
+    .plan { background: var(--paper); border-radius: var(--radius); padding: 34px; border: 1px solid rgba(193, 200, 199, .45); display: flex; flex-direction: column; }
+    .plan.featured { background: var(--ink); color: #dfeaea; border-color: transparent; box-shadow: 0 40px 80px -40px rgba(15, 45, 46, .6); }
+    .plan h3 { font: 800 1.2rem/1 var(--sans); margin: 0 0 8px; color: var(--ink); letter-spacing: -.01em; }
+    .plan.featured h3 { color: #fff; }
+    .plan .for { margin: 0 0 26px; color: var(--muted); font-size: .95rem; }
+    .plan.featured .for { color: #a9c3c3; }
+    .price { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+    .price b { font: 500 3.4rem/1 var(--serif); color: var(--ink); letter-spacing: -.03em; }
+    .plan.featured .price b { color: #fff; }
+    .price span { color: var(--muted); font-weight: 600; }
+    .price-note { font-size: 13px; color: var(--muted); min-height: 20px; margin-bottom: 24px; }
+    .plan.featured .price-note { color: var(--aqua); }
+    .plan ul { list-style: none; padding: 0; margin: 0 0 30px; display: grid; gap: 12px; }
+    .plan li { display: flex; gap: 10px; font-size: .97rem; }
+    .plan li::before { content: ''; flex: 0 0 18px; height: 18px; margin-top: 2px; border-radius: 50%; background: var(--mint) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b6769' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center / 12px no-repeat; }
+    .plan.featured li::before { background-color: rgba(201, 232, 233, .18); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9e8e9' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E"); }
+    .plan .btn { margin-top: auto; width: 100%; }
+    .plan.featured .btn-primary { background: #fff; color: var(--ink); }
+    .plan.featured .btn-primary:hover { background: var(--aqua); }
+    .fine { margin-top: 22px; font-size: 13px; color: var(--muted); }
+
+    /* Preguntas */
+    .faq-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 70px; }
+    details { border-bottom: 1px solid var(--line); }
+    details:first-child { border-top: 1px solid var(--line); }
+    summary {
+      list-style: none; cursor: pointer; padding: 24px 40px 24px 0; position: relative;
+      font: 700 1.08rem/1.35 var(--sans); color: var(--ink);
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: ''; position: absolute; right: 6px; top: 50%; width: 14px; height: 14px; margin-top: -7px;
+      background: linear-gradient(var(--ink), var(--ink)) center / 14px 2px no-repeat, linear-gradient(var(--ink), var(--ink)) center / 2px 14px no-repeat;
+      transition: transform .3s;
+    }
+    details[open] summary::after { transform: rotate(45deg); }
+    details .answer { padding: 0 40px 26px 0; color: var(--dim); }
+    details .answer p { margin: 0 0 10px; }
+
+    /* Llamada final */
+    .final { padding: 120px 0 90px; overflow: hidden; text-align: center; }
+    .marquee { display: flex; width: max-content; animation: marquee 32s linear infinite; }
+    .marquee span {
+      font: 500 clamp(3rem, 9vw, 8rem)/1.05 var(--serif); letter-spacing: -.03em; color: var(--ink);
+      padding-right: .6em; white-space: nowrap;
+    }
+    .marquee span em { color: var(--accent); }
+    @keyframes marquee { to { transform: translateX(-50%); } }
+    .final .btn { margin-top: 44px; height: 56px; padding: 0 30px; font-size: 16px; }
+
+    footer { border-top: 1px solid var(--line); padding: 44px 0 60px; font-size: 13px; color: var(--muted); }
+    footer .wrap { display: flex; justify-content: space-between; gap: 30px; flex-wrap: wrap; }
+    footer nav { display: flex; gap: 18px; flex-wrap: wrap; }
+    footer a { text-decoration: none; }
+    footer a:hover { color: var(--ink); }
+    footer .disclaimer { max-width: 560px; line-height: 1.55; }
+
+    /* ---------- Móvil y tablet ---------- */
+    @media (max-width: 900px) {
+      .nav-links { display: none; }
+      .nav .btn { margin-left: auto; }
+      .story { height: calc(var(--scenes, 9) * 120vh + 100vh); }
+      .story-sticky {
+        grid-template-columns: 1fr; grid-template-rows: auto 1fr; gap: 10px; align-items: stretch;
+        padding-top: calc(var(--nav-h) + 4px); padding-bottom: 18px;
+      }
+      .story-copy { min-height: 0; height: 215px; text-align: center; }
+      .scene { justify-content: flex-start; align-items: center; }
+      .scene .hero-actions { display: none; }
+      .scene p { font-size: .98rem; max-width: 26em; }
+      .hero-title { font-size: clamp(2rem, 8.6vw, 3rem); margin-bottom: 10px; }
+      .scene h2 { font-size: clamp(1.7rem, 7vw, 2.4rem); margin-bottom: 8px; }
+      .eyebrow { margin-bottom: 10px; font-size: 11px; }
+      .hero-actions { margin-top: 14px; justify-content: center; }
+      .hero-actions .btn { height: 40px; padding: 0 16px; font-size: 14px; }
+      .hero-note, .scroll-hint, .float-tag { display: none; }
+      .chapters { left: 50%; transform: translateX(-50%); bottom: auto; top: calc(100% + 8px); width: 70%; display: none; }
+      .stage { min-height: 0; }
+      .phone { height: 100%; max-height: calc(100svh - var(--nav-h) - 250px); border-radius: 40px; padding: 8px; }
+      .phone::before { top: calc(8px + 1.25%); }
+      .screen { border-radius: 33px; }
+      section.block { padding: 90px 0; }
+      .showcase, .faq-grid { grid-template-columns: 1fr; gap: 40px; }
+      .personas, .plans { grid-template-columns: 1fr; }
+      .feature, .feature + .feature { padding: 26px 0; border-left: 0; border-bottom: 1px solid var(--line); }
+      .features { border-top: 0; margin-top: 40px; }
+      .compare { grid-template-columns: 1fr; gap: 14px; margin-top: 36px; }
+      .compare-col { padding: 24px; }
+      .compare-arrow { transform: rotate(90deg); justify-self: center; }
+      .day { grid-template-columns: 1fr; border-top: 0; margin-top: 36px; }
+      .day > div, .day > div + div { padding: 20px 0; border-left: 0; border-bottom: 1px solid var(--line); }
+    }
+    @media (max-width: 900px) and (max-height: 700px) {
+      .story-copy { height: 150px; }
+      .scene p { display: none; }
+      .scene.intro-scene p { display: block; font-size: .9rem; }
+      .hero-actions { display: none; }
+      .phone { max-height: calc(100svh - var(--nav-h) - 180px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .reveal, .scene, .phone, .float-tag { transition: none; }
+      .marquee { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav" id="nav">
+    <div class="wrap">
+      <a class="logo" href="/presentacion">lente<i></i></a>
+      <nav class="nav-links" aria-label="Secciones">
+        <a href="#antes-despues">La diferencia</a>
+        <a href="#por-que">Por qué lente</a>
+        <a href="#noticia">Cómo es una noticia</a>
+        <a href="#precios">Precios</a>
+        <a href="#preguntas">Preguntas</a>
+      </nav>
+      <a class="btn btn-primary btn-sm" href="/">Abrir la app</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Inicio: el recorrido de la app avanza con el scroll -->
+    <section class="story" id="inicio" aria-label="Recorrido por la app">
+      <div class="story-sticky">
+        <div class="story-copy" id="story-copy">
+          <div class="scene intro-scene on" data-scene="intro">
+            <div class="eyebrow">Noticias económicas explicadas</div>
+            <h1 class="hero-title">Entiende la economía en <em>5 minutos</em> al día.</h1>
+            <p>Las noticias que mueven tu dinero, contadas en lenguaje llano y con lo que significan para ti. Para quienes no viven pegados al mercado.</p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="/">Empezar gratis</a>
+              <a class="btn btn-ghost" href="#antes-despues">Ver la diferencia</a>
+            </div>
+            <div class="hero-note"><span>Gratis</span><span>Sin descargas</span><span>Móvil y ordenador</span></div>
+            <div class="scroll-hint"><b></b> Desliza para ver la app</div>
+          </div>
+          <div class="scene" data-scene="card">
+            <div class="eyebrow"><span class="num">01</span> La edición del día</div>
+            <h2>Cada noticia, en lenguaje llano.</h2>
+            <p>Titular, contexto y qué ha pasado, sin jerga financiera. Cada noticia ocupa toda la pantalla: deslizas y pasas a la siguiente.</p>
+          </div>
+          <div class="scene" data-scene="meaning">
+            <div class="eyebrow"><span class="num">02</span> Tu bolsillo</div>
+            <h2>¿Qué significa para ti?</h2>
+            <p>Lo que cambia en tu hipoteca, tus ahorros o tu cartera, explicado en un par de líneas. Si quieres más detalle, pulsa «Leer más».</p>
+          </div>
+          <div class="scene" data-scene="more">
+            <div class="eyebrow"><span class="num">03</span> Seleccionadas cada mañana</div>
+            <h2>Una edición diaria, revisada por personas.</h2>
+            <p>Entre cinco y siete noticias al día, con sus fuentes siempre visibles. La IA resume y un equipo humano revisa antes de publicar.</p>
+          </div>
+          <div class="scene" data-scene="markets">
+            <div class="eyebrow"><span class="num">04</span> Mercados</div>
+            <h2>Los mercados, de un vistazo.</h2>
+            <p>Índices, divisas, materias primas, cripto y las principales acciones españolas y americanas, en una sola lista.</p>
+          </div>
+          <div class="scene" data-scene="favs">
+            <div class="eyebrow"><span class="num">05</span> Favoritos</div>
+            <h2>Lo que sigues, siempre primero.</h2>
+            <p>Marca con una estrella los mercados que te importan y aparecerán arriba del todo y en la barra de cotizaciones de cada mañana.</p>
+          </div>
+          <div class="scene" data-scene="chart">
+            <div class="eyebrow"><span class="num">06</span> Gráficos</div>
+            <h2>Gráficos claros, sin ruido.</h2>
+            <p>De un día a un año con un toque. Solo lo necesario para saber si algo sube, baja o se mantiene.</p>
+          </div>
+          <div class="scene" data-scene="topics">
+            <div class="eyebrow"><span class="num">07</span> Ámbitos</div>
+            <h2>Sigue solo lo que te interesa.</h2>
+            <p>Bolsa, política monetaria, vivienda, energía, cripto, España… Filtra la edición por ámbitos en un segundo.</p>
+          </div>
+          <div class="scene" data-scene="login">
+            <div class="eyebrow"><span class="num">08</span> Tu cuenta</div>
+            <h2>Entras una vez. Y ya está.</h2>
+            <p>Tu sesión se mantiene iniciada en tu móvil. Con Premium guardas noticias y consultas todas las ediciones anteriores.</p>
+            <div class="hero-actions"><a class="btn btn-primary" href="/">Probar lente gratis</a></div>
+          </div>
+          <div class="chapters" id="chapters" aria-hidden="true"></div>
+        </div>
+
+        <div class="stage">
+          <div class="glow" id="glow"></div>
+          <div class="phone" id="phone">
+            <div class="screen" id="screen">
+              <video id="tour" muted playsinline preload="auto" poster="/media/lente-recorrido.jpg" aria-label="Recorrido por la app lente"></video>
+              <img src="/media/lente-recorrido.jpg" alt="" aria-hidden="true">
+              <div class="loadbar" id="loadbar"><i></i></div>
+            </div>
+          </div>
+          <div class="float-tag tag-a" data-show="card meaning"><span class="dot">⏱</span><div>40 segundos<small>por noticia</small></div></div>
+          <div class="float-tag tag-b" data-show="favs markets"><span class="dot star">★</span><div>Tus favoritos<small>arriba del todo</small></div></div>
+          <div class="float-tag tag-c" data-show="more topics"><span class="dot">✓</span><div>Revisado por personas<small>con fuentes visibles</small></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Antes / con lente -->
+    <section class="block compare-block" id="antes-despues">
+      <div class="wrap">
+        <div class="kicker reveal">La diferencia</div>
+        <h2 class="h2 reveal d1">La misma noticia. Contada para que la entiendas.</h2>
+        <div class="compare">
+          <article class="compare-col before reveal d1" aria-label="Noticia en la prensa económica">
+            <div class="compare-tag">Así te llega hoy</div>
+            <h3>El BCE mantiene la facilidad de depósito en el 2 % ante la moderación de la inflación subyacente y el deterioro de las perspectivas de crecimiento</h3>
+            <p>El Consejo de Gobierno reitera su enfoque dependiente de los datos, reunión a reunión, mientras los mercados monetarios elevan al 60 % la probabilidad implícita de un recorte de 25 puntos básicos en el cuarto trimestre, con la curva de €STR descontando…</p>
+            <ul class="compare-cost">
+              <li>6 minutos de lectura</li>
+              <li>Jerga técnica</li>
+              <li>¿Y a mí qué?</li>
+            </ul>
+          </article>
+          <div class="compare-arrow" aria-hidden="true">→</div>
+          <article class="compare-col after reveal d2" aria-label="La misma noticia en lente">
+            <div class="compare-tag">Así te la cuenta lente</div>
+            <h3>El BCE no toca los tipos, pero apunta a una bajada en diciembre</h3>
+            <p>La inflación ya está cerca del 2 % y la economía se enfría, así que el mercado da por probable un recorte antes de fin de año.</p>
+            <div class="meaning">
+              <div class="label">¿Qué significa para ti?</div>
+              <p>Si tienes hipoteca variable, el euríbor podría seguir bajando. Los depósitos irán pagando algo menos.</p>
+            </div>
+            <ul class="compare-cost good">
+              <li>40 segundos</li>
+              <li>Lenguaje llano</li>
+              <li>Tu bolsillo, primero</li>
+            </ul>
+          </article>
+        </div>
+        <div class="day reveal d2">
+          <div><b>08:00</b><span>Abres lente con el café: 5 noticias, lo que ha pasado desde ayer.</span></div>
+          <div><b>08:05</b><span>Ya sabes qué ha cambiado y cómo te afecta. Cierras la app.</span></div>
+          <div><b>Durante el día</b><span>Tus mercados favoritos, arriba del todo, con su gráfico a un toque.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Por qué lente -->
+    <section class="block" id="por-que">
+      <div class="wrap">
+        <div class="kicker reveal">Por qué lente</div>
+        <h2 class="h2 reveal d1">La economía te afecta. Entenderla no debería costarte una hora.</h2>
+        <p class="lead reveal d2">La prensa económica está escrita para profesionales. lente está escrita para ti: el que tiene una hipoteca, un fondo indexado o unos ahorros y quiere saber qué pasa sin tragarse la jerga.</p>
+        <div class="features">
+          <div class="feature reveal"><span class="n">01</span><h3>Cinco minutos al día</h3><p>Una edición cerrada cada mañana. La lees en el café y ya sabes lo importante.</p></div>
+          <div class="feature reveal d1"><span class="n">02</span><h3>Sin jerga</h3><p>Explicado como te lo contaría alguien que sabe del tema y tiene paciencia.</p></div>
+          <div class="feature reveal d2"><span class="n">03</span><h3>Qué significa para ti</h3><p>Cada noticia termina con su efecto en tu dinero. Nada de teoría en el aire.</p></div>
+          <div class="feature reveal d3"><span class="n">04</span><h3>Fuentes a la vista</h3><p>Siempre sabes de dónde sale cada dato y puedes leer el artículo original.</p></div>
+          <div class="feature reveal d4"><span class="n">05</span><h3>En cualquier pantalla</h3><p>Funciona en el navegador y se instala como una app. Sin tiendas ni descargas pesadas.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Anatomía de una noticia -->
+    <section class="block" id="noticia" style="padding-top: 40px;">
+      <div class="wrap showcase">
+        <div>
+          <div class="kicker reveal">Cómo es una noticia</div>
+          <h2 class="h2 reveal d1">Todo lo que necesitas. Nada que sobre.</h2>
+          <ul class="anatomy">
+            <li class="reveal d1"><b>1</b><div><strong>El titular, claro</strong><span>Sin clickbait ni dobles sentidos. Lo que ha pasado, en una frase.</span></div></li>
+            <li class="reveal d2"><b>2</b><div><strong>Qué ha pasado</strong><span>El contexto justo para entenderlo, aunque no hayas seguido la historia.</span></div></li>
+            <li class="reveal d3"><b>3</b><div><strong>¿Qué significa para ti?</strong><span>El impacto concreto en hipotecas, ahorros, inversiones o precios.</span></div></li>
+            <li class="reveal d4"><b>4</b><div><strong>Fuentes</strong><span>Medios y organismos originales, enlazados para que compruebes lo que quieras.</span></div></li>
+          </ul>
+        </div>
+        <article class="mock-card reveal d2" aria-label="Ejemplo de noticia">
+          <span class="chip">Política monetaria</span><span class="time">· 45 s</span>
+          <h4>El BCE mantiene los tipos y deja la puerta abierta a un recorte en diciembre</h4>
+          <p class="deck">La inflación de la eurozona se acerca al 2 % y Fráncfort empieza a hablar de «normalizar» el precio del dinero.</p>
+          <div class="label">Qué ha pasado</div>
+          <p style="margin:0;font:400 1rem/1.55 var(--serif);color:var(--text);">El Consejo de Gobierno ha dejado el tipo de depósito sin cambios. Los mercados ya descuentan con más de un 60 % de probabilidad una bajada de un cuarto de punto antes de fin de año.</p>
+          <div class="meaning">
+            <div class="label">¿Qué significa para ti?</div>
+            <p>Si tienes una hipoteca variable, el euríbor podría seguir bajando en los próximos meses. Los depósitos remunerados irán pagando algo menos.</p>
+          </div>
+          <div class="sources">Fuente: BCE · Expansión · Financial Times</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Para cada lector -->
+    <section class="block" style="padding-top: 40px;">
+      <div class="wrap">
+        <div class="kicker reveal">Para cada tipo de lector</div>
+        <h2 class="h2 reveal d1">La misma noticia. Lo que te importa a ti.</h2>
+        <div class="personas">
+          <div class="persona reveal">
+            <h3>Tienes una hipoteca</h3>
+            <p class="sub">Sabrás cuándo se mueve el euríbor y por qué, antes de que llegue la revisión.</p>
+            <div class="ui meaning"><div class="label">¿Qué significa para ti?</div><p>Si el euríbor baja un cuarto de punto, una hipoteca de 100.000 € a 25 años pagaría unos 13 € menos al mes tras la revisión.</p></div>
+          </div>
+          <div class="persona dark reveal d1">
+            <h3>Inviertes en fondos indexados</h3>
+            <p class="sub">Entiende por qué sube o baja tu cartera sin mirar la cotización cada hora.</p>
+            <div class="ui tick-row">
+              <div class="tick"><small>S&amp;P 500</small><b style="color:#fff">6.412</b><em style="color:#9fe0c7">+0,84 %</em></div>
+              <div class="tick" style="background:rgba(255,255,255,.06)"><small>MSCI World</small><b style="color:#fff">4.105</b><em style="color:#9fe0c7">+0,51 %</em></div>
+              <div class="tick" style="background:rgba(255,255,255,.06)"><small>IBEX 35</small><b style="color:#fff">12.845</b><em style="color:#9fe0c7">+1,62 %</em></div>
+            </div>
+          </div>
+          <div class="persona reveal d1">
+            <h3>Sigues unos pocos mercados</h3>
+            <p class="sub">Marca tus favoritos y tenlos arriba del todo, con su gráfico a un toque.</p>
+            <div class="ui">
+              <svg class="spark" viewBox="0 0 300 70" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="g1" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2b6769" stop-opacity=".22"/><stop offset="1" stop-color="#2b6769" stop-opacity="0"/></linearGradient></defs><path d="M0 52 L20 48 L40 50 L60 41 L80 44 L100 36 L120 38 L140 30 L160 33 L180 24 L200 27 L220 19 L240 22 L260 13 L280 16 L300 8 L300 70 L0 70Z" fill="url(#g1)"/><path d="M0 52 L20 48 L40 50 L60 41 L80 44 L100 36 L120 38 L140 30 L160 33 L180 24 L200 27 L220 19 L240 22 L260 13 L280 16 L300 8" fill="none" stroke="#2b6769" stroke-width="2.2"/></svg>
+              <div class="tick-row" style="margin-top:12px"><div class="tick"><small><span class="star">★</span> Bitcoin</small><b>101.250</b><em class="down">−4,46 %</em></div><div class="tick"><small><span class="star">★</span> IBEX 35</small><b>12.845</b><em class="up">+1,62 %</em></div></div>
+            </div>
+          </div>
+          <div class="persona reveal d2">
+            <h3>Tienes tus ahorros en el banco</h3>
+            <p class="sub">Descubre cuándo compensa mover el dinero y cuándo es mejor esperar.</p>
+            <div class="ui meaning"><div class="label">¿Qué significa para ti?</div><p>Las cuentas remuneradas suelen bajar su interés tras un recorte. Un depósito a plazo fijo mantiene el tipo pactado hasta que vence.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Precios -->
+    <section class="block" id="precios">
+      <div class="wrap">
+        <div class="pricing-head">
+          <div>
+            <div class="kicker reveal">Precios</div>
+            <h2 class="h2 reveal d1">Empieza gratis. Pasa a Premium si lo quieres todo.</h2>
+          </div>
+          <div class="toggle reveal d2" role="group" aria-label="Periodo de facturación">
+            <button type="button" data-billing="monthly">Mensual</button>
+            <button type="button" data-billing="yearly" class="on">Anual <span class="save">−67 %</span></button>
+          </div>
+        </div>
+        <div class="plans">
+          <div class="plan reveal">
+            <h3>Gratis</h3>
+            <p class="for">Para estar al día cada mañana.</p>
+            <div class="price"><b>0 €</b><span>para siempre</span></div>
+            <div class="price-note">Sin tarjeta</div>
+            <ul>
+              <li>Las 5 primeras noticias de cada edición</li>
+              <li>«¿Qué significa para ti?» en todas ellas</li>
+              <li>Mercados, gráficos y favoritos</li>
+              <li>Filtro por ámbitos</li>
+            </ul>
+            <a class="btn btn-ghost" href="/">Empezar gratis</a>
+          </div>
+          <div class="plan featured reveal d1">
+            <h3>Premium</h3>
+            <p class="for">Para quien no quiere perderse nada.</p>
+            <div class="price"><b id="price-amount">20 €</b><span id="price-period">/ año</span></div>
+            <div class="price-note" id="price-note">IVA incluido · menos de 2 € al mes</div>
+            <ul>
+              <li>Todas las noticias de cada edición</li>
+              <li>Histórico completo de ediciones anteriores</li>
+              <li>Guarda las noticias que quieras releer</li>
+              <li>Todo lo del plan gratuito</li>
+            </ul>
+            <a class="btn btn-primary" href="/">Hazte Premium en la app</a>
+          </div>
+        </div>
+        <p class="fine reveal">El pago se gestiona con Stripe y puedes cancelar cuando quieras desde tu perfil.</p>
+      </div>
+    </section>
+
+    <!-- Preguntas -->
+    <section class="block" id="preguntas" style="padding-top: 40px;">
+      <div class="wrap faq-grid">
+        <div>
+          <div class="kicker reveal">Preguntas frecuentes</div>
+          <h2 class="h2 reveal d1">Lo que sueles preguntarnos.</h2>
+          <p class="lead reveal d2">Y si te queda alguna duda, la forma más rápida de resolverla es probar la app: es gratis.</p>
+        </div>
+        <div class="reveal d1">
+          <details open>
+            <summary>¿Qué es lente?</summary>
+            <div class="answer"><p>Una app de noticias económicas explicadas. Cada mañana publica una edición corta con lo más importante del día, en lenguaje llano y con lo que significa para tu dinero.</p></div>
+          </details>
+          <details>
+            <summary>¿Quién escribe las noticias?</summary>
+            <div class="answer"><p>Partimos de medios y organismos de referencia. Una IA prepara el resumen y una persona lo revisa antes de publicarlo. Lo explicamos todo en nuestra <a href="/transparencia-ia">página de transparencia sobre IA</a>.</p></div>
+          </details>
+          <details>
+            <summary>¿Es asesoramiento financiero?</summary>
+            <div class="answer"><p>No. lente es contenido informativo y divulgativo: no constituye asesoramiento financiero ni recomendación de inversión. Para decisiones concretas, consulta con un profesional autorizado.</p></div>
+          </details>
+          <details>
+            <summary>¿Tengo que instalar algo?</summary>
+            <div class="answer"><p>No. Funciona directamente en el navegador del móvil o del ordenador. Si quieres, puedes añadirla a tu pantalla de inicio y se comporta como una app más.</p></div>
+          </details>
+          <details>
+            <summary>¿Tengo que iniciar sesión cada vez?</summary>
+            <div class="answer"><p>No. Inicias sesión una vez y lente te recuerda en ese dispositivo hasta que cierres sesión.</p></div>
+          </details>
+          <details>
+            <summary>¿Puedo cancelar Premium?</summary>
+            <div class="answer"><p>Sí, cuando quieras y sin permanencia, desde el portal de facturación de tu perfil.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Llamada final -->
+    <section class="final" aria-label="Empieza ahora">
+      <div class="marquee" aria-hidden="true">
+        <span>¿Listo para entender la <em>economía</em>?</span><span>¿Listo para entender la <em>economía</em>?</span>
+        <span>¿Listo para entender la <em>economía</em>?</span><span>¿Listo para entender la <em>economía</em>?</span>
+      </div>
+      <a class="btn btn-primary" href="/">Abrir lente gratis</a>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div>
+        <a class="logo" href="/presentacion">lente<i></i></a>
+        <p class="disclaimer">Contenido informativo elaborado con asistencia de IA y revisión humana. No constituye asesoramiento financiero ni recomendación de inversión (CNMV).</p>
+      </div>
+      <nav aria-label="Legal">
+        <a href="/aviso-legal">Aviso legal</a>
+        <a href="/privacidad">Privacidad</a>
+        <a href="/cookies">Cookies</a>
+        <a href="/terminos">Términos</a>
+        <a href="/transparencia-ia">Transparencia IA</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+  (() => {
+    const VIDEO_URL = '/media/lente-recorrido.mp4';
+    const SCENES_URL = '/media/lente-recorrido.json';
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const nav = document.getElementById('nav');
+    const story = document.getElementById('inicio');
+    const video = document.getElementById('tour');
+    const screen = document.getElementById('screen');
+    const loadbar = document.querySelector('#loadbar i');
+    const phone = document.getElementById('phone');
+    const glow = document.getElementById('glow');
+    const sceneEls = [...document.querySelectorAll('.scene')];
+    const tags = [...document.querySelectorAll('.float-tag')];
+    const chapters = document.getElementById('chapters');
+
+    let scenes = sceneEls.map((el, i) => ({ id: el.dataset.scene, t: i * 4 }));
+    let duration = scenes.length * 4;
+    let ready = false;
+    let target = 0;
+    let current = 0;
+    let activeId = null;
+    let seeking = false;
+
+    story.style.setProperty('--scenes', String(sceneEls.length));
+
+    // Barras de capítulos: cada una lleva a su escena
+    sceneEls.forEach((el, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.tabIndex = -1;
+      b.addEventListener('click', () => scrollToScene(i));
+      chapters.appendChild(b);
+    });
+    const chapterBtns = [...chapters.children];
+
+    function storyProgress() {
+      const rect = story.getBoundingClientRect();
+      const total = story.offsetHeight - innerHeight;
+      return Math.min(1, Math.max(0, -rect.top / total));
+    }
+
+    function scrollToScene(i) {
+      const total = story.offsetHeight - innerHeight;
+      scrollTo({ top: story.offsetTop + total * ((i + 0.02) / scenes.length), behavior: 'smooth' });
+    }
+
+    // Cada escena ocupa el mismo tramo de scroll. El tiempo del vídeo avanza en línea, sin saltos.
+    function timeAt(p) {
+      const n = scenes.length;
+      const x = Math.min(n - 1e-6, p * n);
+      const i = Math.floor(x);
+      const f = x - i;
+      const start = scenes[i].t;
+      const end = i + 1 < n ? scenes[i + 1].t : duration - 0.05;
+      return { t: start + (end - start) * f, i, f };
+    }
+
+    function setScene(i) {
+      const id = scenes[i]?.id;
+      if (id === activeId) return;
+      activeId = id;
+      sceneEls.forEach((el, k) => {
+        el.classList.toggle('on', k === i);
+        el.classList.toggle('past', k < i);
+      });
+      tags.forEach((t) => t.classList.toggle('on', t.dataset.show.split(' ').includes(id)));
+      chapters.classList.toggle('hidden', i === 0);
+      glow.style.setProperty('--glow', i % 2 ? '1.06' : '1');
+    }
+
+    function onScroll() {
+      nav.classList.toggle('scrolled', scrollY > 10);
+      const p = storyProgress();
+      const { t, i, f } = timeAt(p);
+      target = t;
+      wake();
+      setScene(i);
+      chapterBtns.forEach((b, k) => b.style.setProperty('--fill', k < i ? 1 : k === i ? f.toFixed(3) : 0));
+    }
+
+    // El vídeo sigue el scroll con un poco de inercia, como si alguien deslizara el teléfono.
+    let rafId = 0;
+    let lastTs = 0;
+    function tick(ts) {
+      const dt = lastTs ? Math.min(48, ts - lastTs) : 16.7;
+      lastTs = ts;
+      if (ready) {
+        current += (target - current) * (1 - Math.pow(0.78, dt / 16.7));
+        if (Math.abs(target - current) < 0.008) current = target;
+        if (!seeking && Math.abs(video.currentTime - current) > 0.02) {
+          seeking = true;
+          video.currentTime = current;
+          const done = () => { seeking = false; video.removeEventListener('seeked', done); };
+          video.addEventListener('seeked', done, { once: true });
+        }
+      }
+      if (!ready || current !== target || seeking) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        rafId = 0;
+        lastTs = 0;
+      }
+    }
+    function wake() {
+      if (!rafId && !reduceMotion) rafId = requestAnimationFrame(tick);
+    }
+
+    async function loadVideo() {
+      try {
+        const meta = await fetch(SCENES_URL).then((r) => r.json());
+        const byId = new Map(meta.scenes.map((s) => [s.id, s.t]));
+        scenes = sceneEls.map((el) => ({ id: el.dataset.scene, t: byId.get(el.dataset.scene) ?? 0 }));
+        duration = meta.duration;
+        onScroll();
+      } catch { /* tiempos por defecto */ }
+
+      // Descargar el vídeo entero permite saltar a cualquier punto sin esperas.
+      let src = VIDEO_URL;
+      try {
+        const res = await fetch(VIDEO_URL);
+        const total = Number(res.headers.get('content-length')) || 0;
+        if (res.body && total) {
+          const reader = res.body.getReader();
+          const chunks = [];
+          let got = 0;
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            got += value.length;
+            loadbar.style.transform = `scaleX(${(got / total).toFixed(3)})`;
+          }
+          src = URL.createObjectURL(new Blob(chunks, { type: 'video/mp4' }));
+        }
+      } catch { /* se usa la URL directa */ }
+
+      video.src = src;
+      await new Promise((r) => video.addEventListener('loadeddata', r, { once: true }));
+      // Safari no pinta fotogramas de un vídeo que nunca se ha reproducido.
+      try { await video.play(); video.pause(); } catch { /* autoplay bloqueado: seguimos */ }
+      video.currentTime = current = target;
+      ready = true;
+      screen.classList.add('ready');
+      wake();
+    }
+
+    if (reduceMotion) {
+      video.src = VIDEO_URL;
+      video.loop = true;
+      video.autoplay = true;
+      video.controls = true;
+      screen.classList.add('ready');
+    } else {
+      loadVideo();
+    }
+
+    addEventListener('scroll', onScroll, { passive: true });
+    addEventListener('resize', onScroll);
+    onScroll();
+
+    // Aparición de bloques al entrar en pantalla
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+    // Precios mensual / anual
+    const PRICES = {
+      monthly: { amount: '5 €', period: '/ mes', note: 'IVA incluido · sin permanencia' },
+      yearly: { amount: '20 €', period: '/ año', note: 'IVA incluido · menos de 2 € al mes' },
+    };
+    document.querySelectorAll('[data-billing]').forEach((b) => b.addEventListener('click', () => {
+      document.querySelectorAll('[data-billing]').forEach((x) => x.classList.toggle('on', x === b));
+      const p = PRICES[b.dataset.billing];
+      document.getElementById('price-amount').textContent = p.amount;
+      document.getElementById('price-period').textContent = p.period;
+      document.getElementById('price-note').textContent = p.note;
+    }));
+  })();
+  </script>
+</body>
+</html>

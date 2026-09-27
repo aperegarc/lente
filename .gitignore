@@ -30,3 +30,7 @@ yarn-error.log*
 
 .vercel
 .env*.local
+
+# Temporales de la grabación del vídeo promocional
+promo/.build/
+tests/e2e/capturas/

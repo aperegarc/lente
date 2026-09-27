@@ -155,7 +155,9 @@ function initSupabase() {
   const sdk = window.supabase;
   if (sdk?.createClient && !supabaseClient) {
     try {
-      supabaseClient = sdk.createClient(url, anon);
+      supabaseClient = sdk.createClient(url, anon, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      });
       supabaseReady = true;
     } catch (err) {
       console.error('[lente] createClient falló', err);
@@ -308,8 +310,9 @@ function feedSlide(innerHtml) {
 function scrollFeedToStart() {
   const el = $('feed-scroll');
   if (!el) return;
+  // Instantáneo: con scroll-behavior:smooth, scrollTop = 0 anima y el scroll-snap lo pisa.
   const reset = () => {
-    el.scrollTop = 0;
+    el.scrollTo({ top: 0, behavior: 'instant' });
   };
   reset();
   requestAnimationFrame(() => {
@@ -325,10 +328,10 @@ async function loadFeed() {
   scrollFeedToStart();
   try {
     await waitForSupabase();
-    const url = API.feed + '?_t=' + Date.now();
     const headers = {};
     const token = state.session?.access_token;
     if (token) headers.Authorization = `Bearer ${token}`;
+    const url = token ? `${API.feed}?auth=1` : API.feed;
     const res = await fetch(url, { headers });
     if (res.status === 403) {
       const errBody = await res.json().catch(() => ({}));
@@ -352,11 +355,159 @@ async function loadFeed() {
   }
 }
 
+// ----- Feed a pantalla completa: cada tarjeta se ajusta a su hueco sin cortarse -----
+// Niveles de más holgado a más compacto; se usa el primero que cabe.
+// Líneas: 0 = sin límite, -1 = sección oculta.
+const NEWS_FIT_LEVELS = [
+  { deck: 0, body: 8, meaning: 0 },
+  { deck: 0, body: 5, meaning: 0 },
+  { deck: 0, body: 3, meaning: 0 },
+  { deck: 0, body: 3, meaning: 5 },
+  { deck: 3, body: 2, meaning: 4 },
+  { deck: 3, body: 2, meaning: 3, compact: true },
+  { deck: 2, body: 2, meaning: 3, compact: true },
+  { deck: 2, body: 1, meaning: 2, compact: true, tight: true },
+  { deck: -1, body: 1, meaning: 2, compact: true, tight: true },
+  { deck: -1, body: 1, meaning: 2, compact: true, tight: true, noAi: true },
+  { deck: -1, body: -1, meaning: 2, compact: true, tight: true, noAi: true },
+  { deck: -1, body: -1, meaning: 1, headline: 3, compact: true, tight: true, noAi: true },
+];
+const INTRO_FIT_LEVELS = [
+  {},
+  { compact: true },
+  { compact: true, noStats: true },
+  { compact: true, tight: true, noStats: true },
+];
+
+function setFitLines(el, lines, hideTarget = el) {
+  if (!el) return;
+  hideTarget.classList.toggle('fit-hidden', lines === -1);
+  el.classList.toggle('is-clamped', lines > 0);
+  if (lines > 0) el.style.setProperty('--lines', String(lines));
+  else el.style.removeProperty('--lines');
+}
+
+function applyFitLevel(card, lvl) {
+  card.classList.toggle('fit-compact', !!lvl.compact);
+  card.classList.toggle('fit-tight', !!lvl.tight);
+  card.classList.toggle('fit-no-ai', !!lvl.noAi);
+  card.classList.toggle('fit-no-stats', !!lvl.noStats);
+  setFitLines(card.querySelector('.headline'), lvl.headline ?? 0);
+  setFitLines(card.querySelector('.deck'), lvl.deck ?? 0);
+  const body = card.querySelector('.body-text');
+  setFitLines(body, lvl.body ?? 0, body?.closest('.card-what') || body);
+  setFitLines(card.querySelector('.meaning-text'), lvl.meaning ?? 0);
+}
+
+// El pie con margin-top:auto hace que Chrome reporte ~2px de overflow dentro del padding inferior.
+const FIT_TOLERANCE_PX = 3;
+
+function cardFits(card) {
+  return card.scrollHeight <= card.clientHeight + FIT_TOLERANCE_PX;
+}
+
+function cardIsTruncated(card) {
+  if (card.querySelector('.fit-hidden') || card.classList.contains('fit-no-ai')) return true;
+  return [...card.querySelectorAll('.is-clamped')].some((el) => el.scrollHeight > el.clientHeight + 1);
+}
+
+const FIT_FILL_ORDER = [
+  ['headline', '.headline'],
+  ['meaning', '.meaning-text'],
+  ['body', '.body-text'],
+  ['deck', '.deck'],
+];
+
+/** Tras elegir nivel, devuelve líneas a los textos recortados mientras sigan cabiendo. */
+function fillFreeSpace(card, lvl) {
+  let best = { ...lvl };
+  for (const [key, sel] of FIT_FILL_ORDER) {
+    const el = card.querySelector(sel);
+    if (!el) continue;
+    for (let guard = 0; guard < 12; guard++) {
+      const cur = best[key] ?? 0;
+      if (cur === 0) break;
+      if (cur > 0 && el.scrollHeight <= el.clientHeight + 1) break;
+      const next = { ...best, [key]: cur === -1 ? 1 : cur + 1 };
+      applyFitLevel(card, next);
+      if (!cardFits(card)) break;
+      best = next;
+    }
+    applyFitLevel(card, best);
+  }
+  return best;
+}
+
+function fitFeedCard(card) {
+  if (card.classList.contains('is-expanded')) return;
+  const levels = card.classList.contains('card-intro')
+    ? INTRO_FIT_LEVELS
+    : card.querySelector('.body-text') ? NEWS_FIT_LEVELS : null;
+  if (!levels) return;
+  let chosen = levels[levels.length - 1];
+  for (const lvl of levels) {
+    applyFitLevel(card, lvl);
+    if (cardFits(card)) {
+      chosen = lvl;
+      break;
+    }
+  }
+  applyFitLevel(card, chosen);
+  if (levels === NEWS_FIT_LEVELS && cardFits(card)) chosen = fillFreeSpace(card, chosen);
+  card._fitLevel = chosen;
+  const btn = card.querySelector('.read-more-btn');
+  if (btn) btn.hidden = !cardIsTruncated(card);
+}
+
+function slideOffset(scroller, slide) {
+  return slide.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+}
+
+/** Reajusta todas las tarjetas y mantiene a la vista la que se estaba leyendo. */
+function fitFeed({ keepAnchor = true } = {}) {
+  const scroller = $('feed-scroll');
+  if (!scroller || scroller.clientHeight === 0) return;
+  const slides = [...scroller.querySelectorAll('.feed-slide')];
+  const anchor = keepAnchor && slides.find((s) => slideOffset(scroller, s) + s.offsetHeight > scroller.scrollTop + 1);
+  const anchorDelta = anchor ? scroller.scrollTop - slideOffset(scroller, anchor) : 0;
+  scroller.querySelectorAll('.feed-slide .card').forEach(fitFeedCard);
+  if (anchor) {
+    scroller.scrollTo({ top: slideOffset(scroller, anchor) + Math.max(0, anchorDelta), behavior: 'instant' });
+  }
+}
+
+let fitFeedFrame = 0;
+function scheduleFitFeed() {
+  cancelAnimationFrame(fitFeedFrame);
+  fitFeedFrame = requestAnimationFrame(fitFeed);
+}
+
+function bindFeedFit() {
+  const scroller = $('feed-scroll');
+  if (scroller && 'ResizeObserver' in window) new ResizeObserver(scheduleFitFeed).observe(scroller);
+  document.fonts?.ready.then(scheduleFitFeed);
+}
+
 function toggleReadMore(id) {
-  const body = $(`body-${id}`);
-  const btn = $(`readmore-${id}`);
-  const collapsed = body.classList.toggle('collapsed');
-  btn.textContent = collapsed ? 'Leer más ↓' : 'Leer menos ↑';
+  const card = document.querySelector(`#feed-list .card[data-id="${CSS.escape(id)}"]`);
+  if (!card) return;
+  const slide = card.closest('.feed-slide');
+  const btn = card.querySelector('.read-more-btn');
+  const expand = !card.classList.contains('is-expanded');
+  card.classList.toggle('is-expanded', expand);
+  slide?.classList.toggle('is-expanded', expand);
+  if (expand) {
+    const lvl = card._fitLevel || {};
+    applyFitLevel(card, { compact: lvl.compact, tight: lvl.tight });
+  } else {
+    fitFeedCard(card);
+    const scroller = $('feed-scroll');
+    if (scroller && slide) scroller.scrollTo({ top: slideOffset(scroller, slide), behavior: 'instant' });
+  }
+  if (btn) {
+    btn.hidden = false;
+    btn.textContent = expand ? 'Leer menos ↑' : 'Leer más ↓';
+  }
 }
 
 function renderFeed(filterCategory = null) {
@@ -391,20 +542,124 @@ function renderFeed(filterCategory = null) {
     const saveClass = `${saved ? 'saved' : ''} ${saveLocked ? 'action-btn-save-lock' : ''}`;
     const aiRow = cardAiSourceRowHtml(c);
     html += feedSlide(
-      `<section class="card" data-id="${escapeAttr(c.id)}"><div class="card-meta"><span class="category ${escapeAttr(catClass)}">${escapeHtml(c.category)}</span><span class="read-time">· ${Number(c.read_time_seconds) || 40} s</span></div>${aiRow}<h2 class="headline">${escapeHtml(c.headline)}</h2><p class="deck">${escapeHtml(c.deck)}</p><div class="section-label">Qué ha pasado</div><p class="body-text collapsed" id="body-${escapeAttr(c.id)}">${escapeHtml(c.body)}</p><button class="read-more-btn" id="readmore-${escapeAttr(c.id)}" onclick="toggleReadMore('${escapeAttr(c.id)}')">Leer más ↓</button><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${escapeHtml(c.meaning)}</p></div><div class="card-footer"><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${escapeAttr(c.id)}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${escapeAttr(c.id)}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`,
+      `<section class="card" data-id="${escapeAttr(c.id)}"><div class="card-meta"><span class="category ${escapeAttr(catClass)}">${escapeHtml(c.category)}</span><span class="read-time">· ${Number(c.read_time_seconds) || 40} s</span></div>${aiRow}<h2 class="headline">${escapeHtml(c.headline)}</h2><p class="deck">${escapeHtml(c.deck)}</p><div class="card-what"><div class="section-label">Qué ha pasado</div><p class="body-text" id="body-${escapeAttr(c.id)}">${escapeHtml(c.body)}</p></div><div class="meaning-box"><div class="section-label">¿Qué significa para ti?</div><p class="meaning-text">${escapeHtml(c.meaning)}</p></div><div class="card-footer"><button type="button" class="read-more-btn" id="readmore-${escapeAttr(c.id)}" onclick="toggleReadMore('${escapeAttr(c.id)}')">Leer más ↓</button><div class="actions"><button type="button" class="action-btn ${saveClass}" title="${saveLocked ? 'Premium — guardar noticias' : 'Guardar'}" onclick="toggleSave('${escapeAttr(c.id)}', this)"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button><button type="button" class="action-btn" onclick="shareCard('${escapeAttr(c.id)}')"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></button></div></div></section>`,
     );
   }
   feedList.innerHTML = html;
+  fitFeed({ keepAnchor: false });
   scrollFeedToStart();
+}
+
+// ----- Mercados favoritos: localStorage siempre; profiles.favorite_markets si hay sesión -----
+const MARKET_FAVS_KEY = 'lente.market-favs';
+const MARKET_FAVS_MAX = 80;
+
+function readLocalMarketFavs() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(MARKET_FAVS_KEY) || '[]');
+    return Array.isArray(arr) ? arr.filter((s) => typeof s === 'string' && s.length <= 32) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+state.marketFavs = readLocalMarketFavs();
+
+function isMarketFav(symbol) {
+  return state.marketFavs.includes(symbol);
+}
+
+function persistMarketFavs() {
+  try { localStorage.setItem(MARKET_FAVS_KEY, JSON.stringify(state.marketFavs)); } catch (_) { /* cuota */ }
+  const userId = state.session?.user?.id;
+  if (!userId || !supabaseClient || state._favsRemoteUnavailable) return;
+  supabaseClient
+    .from('profiles')
+    .update({ favorite_markets: state.marketFavs })
+    .eq('id', userId)
+    .then(({ error }) => {
+      if (error) {
+        state._favsRemoteUnavailable = true;
+        console.warn('[lente] favoritos solo en este dispositivo:', error.message);
+      }
+    });
+}
+
+/** Une los favoritos de la cuenta con los del dispositivo (tras iniciar sesión). */
+async function syncMarketFavsFromProfile(userId) {
+  if (!userId || !supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .select('favorite_markets')
+    .eq('id', userId)
+    .single();
+  if (error) {
+    state._favsRemoteUnavailable = true;
+    return;
+  }
+  state._favsRemoteUnavailable = false;
+  const remote = Array.isArray(data?.favorite_markets) ? data.favorite_markets : [];
+  const merged = [...new Set([...remote, ...state.marketFavs])].slice(0, MARKET_FAVS_MAX);
+  const changed = merged.length !== remote.length || merged.some((s, i) => s !== remote[i]);
+  state.marketFavs = merged;
+  if (changed) persistMarketFavs();
+  else try { localStorage.setItem(MARKET_FAVS_KEY, JSON.stringify(merged)); } catch (_) { /* cuota */ }
+  if (state.markets.flat.length) {
+    renderMarkets();
+    renderTicker();
+  }
+}
+
+function toggleMarketFav(symbol, anchorBtn = null) {
+  if (!symbol) return;
+  const on = !isMarketFav(symbol);
+  if (on && state.marketFavs.length >= MARKET_FAVS_MAX) {
+    toast(`Máximo ${MARKET_FAVS_MAX} favoritos`);
+    return;
+  }
+  const scroller = $('screen-markets');
+  const anchorCat = anchorBtn?.closest('.market-section')?.dataset.cat;
+  const anchorTop = anchorBtn?.getBoundingClientRect().top;
+
+  state.marketFavs = on ? [...state.marketFavs, symbol] : state.marketFavs.filter((s) => s !== symbol);
+  persistMarketFavs();
+  toast(on ? 'Añadido a favoritos ★' : 'Quitado de favoritos');
+  if (state.markets.flat.length) renderMarkets();
+  renderTicker();
+  syncChartFavButton();
+
+  if (scroller && anchorCat && anchorCat !== 'favs' && anchorTop != null) {
+    const sel = `.market-section[data-cat="${CSS.escape(anchorCat)}"] .market-fav-btn[data-fav="${CSS.escape(symbol)}"]`;
+    const again = document.querySelector(sel);
+    if (again) scroller.scrollTop += again.getBoundingClientRect().top - anchorTop;
+  }
+}
+
+const STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>';
+
+function marketFavButtonHtml(symbol, name) {
+  const on = isMarketFav(symbol);
+  const label = `${on ? 'Quitar' : 'Añadir'} ${name} ${on ? 'de' : 'a'} favoritos`;
+  return `<button type="button" class="market-fav-btn${on ? ' on' : ''}" data-fav="${escapeAttr(symbol)}" aria-pressed="${on}" aria-label="${escapeAttr(label)}" title="${on ? 'Quitar de favoritos' : 'Añadir a favoritos'}">${STAR_SVG}</button>`;
+}
+
+function syncChartFavButton() {
+  const btn = $('chart-fav-btn');
+  if (!btn) return;
+  const on = isMarketFav(state._chartSymbol);
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  btn.setAttribute('aria-label', on ? 'Quitar de favoritos' : 'Añadir a favoritos');
 }
 
 function renderTicker() {
   const tickerEl = $('ticker');
   if (!tickerEl) return;
   
-  // Mostrar ticker simple desde mercados cargados
+  // Favoritos primero; si no hay, una selección popular
   const popular = ['^IBEX', 'AAPL', 'MSFT', 'BTC-USD', 'ETH-USD', 'TSLA'];
-  const items = popular.map(sym => state.markets.flat.find(m => m.symbol === sym)).filter(Boolean);
+  const symbols = [...new Set([...state.marketFavs, ...popular])].slice(0, Math.max(6, state.marketFavs.length));
+  const items = symbols.map(sym => state.markets.flat.find(m => m.symbol === sym)).filter(Boolean);
   
   if (items.length === 0) {
     tickerEl.innerHTML = '';
@@ -425,7 +680,7 @@ async function loadMarkets() {
   marketsList.innerHTML = `<div class="loading">Cargando...</div>`;
   try {
     await waitForSupabase();
-    const res = await fetch(`${API.markets}?view=universe&_t=${Date.now()}`);
+    const res = await fetch(`${API.markets}?view=universe`);
     if (!res.ok) throw new Error('Error');
     state.markets = await res.json();
     state.marketsDisclaimer = state.markets.disclaimer || null;
@@ -457,28 +712,36 @@ function renderMarkets() {
   const cats = Object.keys(state.markets.grouped || {}).sort(
     (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
   );
-  const label = (c) => MARKET_CATEGORY_LABELS[c] || c;
+  const label = (c) => (c === 'favs' ? 'Favoritos' : MARKET_CATEGORY_LABELS[c] || c);
+  const tab = state.currentMarketTab;
   tabs.innerHTML =
-    `<div class="market-tab ${state.currentMarketTab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` +
+    `<div class="market-tab ${tab === 'all' ? 'active' : ''}" onclick="setMarketTab('all')">Todo</div>` +
+    `<div class="market-tab market-tab--favs ${tab === 'favs' ? 'active' : ''}" onclick="setMarketTab('favs')">★ Favoritos${state.marketFavs.length ? ` · ${state.marketFavs.length}` : ''}</div>` +
     cats.map(
       (cat) =>
-        `<div class="market-tab ${state.currentMarketTab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${label(cat)}</div>`,
+        `<div class="market-tab ${tab === cat ? 'active' : ''}" onclick="setMarketTab('${cat}')">${label(cat)}</div>`,
     ).join('');
 
-  const groups =
-    state.currentMarketTab === 'all'
-      ? state.markets.grouped
-      : { [state.currentMarketTab]: state.markets.grouped[state.currentMarketTab] || [] };
+  const favItems = state.marketFavs
+    .map((sym) => state.markets.flat.find((m) => m.symbol === sym))
+    .filter(Boolean);
 
-  const sectionOrder = Object.keys(groups).sort(
-    (a, b) => marketCategorySortKey(a) - marketCategorySortKey(b),
-  );
+  const sections = [];
+  if (tab === 'all' || tab === 'favs') sections.push(['favs', favItems]);
+  if (tab === 'all') {
+    for (const cat of cats) sections.push([cat, state.markets.grouped[cat] || []]);
+  } else if (tab !== 'favs') {
+    sections.push([tab, state.markets.grouped[tab] || []]);
+  }
 
   let html = '';
-  for (const cat of sectionOrder) {
-    const items = groups[cat];
+  for (const [cat, items] of sections) {
+    if (cat === 'favs' && !items.length) {
+      html += `<div class="market-section market-section--favs" data-cat="favs"><h3 class="market-section-title">★ Favoritos</h3><p class="market-favs-empty">Toca la <span class="market-favs-empty-star">${STAR_SVG}</span> de cualquier mercado para tenerlo siempre aquí, arriba del todo.</p></div>`;
+      continue;
+    }
     if (!items?.length) continue;
-    html += `<div class="market-section"><h3 class="market-section-title">${label(cat)}</h3>`;
+    html += `<div class="market-section${cat === 'favs' ? ' market-section--favs' : ''}" data-cat="${escapeAttr(cat)}"><h3 class="market-section-title">${cat === 'favs' ? '★ ' : ''}${label(cat)}</h3>`;
     for (const m of items) {
       const cls =
         m.change_pct > 0 ? 'up' : m.change_pct < 0 ? 'down' : 'flat';
@@ -502,6 +765,7 @@ function renderMarkets() {
             <div class="market-price">${m.price != null && !Number.isNaN(+m.price) ? `${prefix}${fmtNum(m.price, priceDigits)}` : '–'}</div>
             <div class="market-change ${cls}">${m.change_pct != null && !Number.isNaN(+m.change_pct) ? fmtPct(m.change_pct) : '–'}</div>
           </div>
+          ${marketFavButtonHtml(m.symbol, m.name)}
         </div>
       `;
     }
@@ -512,6 +776,13 @@ function renderMarkets() {
     ? `<p class="markets-disclaimer">${state.marketsDisclaimer}</p>`
     : '';
   marketsList.innerHTML = html + disc;
+  marketsList.querySelectorAll('.market-fav-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMarketFav(btn.dataset.fav, btn);
+    });
+    btn.addEventListener('keydown', (e) => e.stopPropagation());
+  });
   marketsList.querySelectorAll('.market-item').forEach((el) => {
     el.addEventListener('click', () => {
       const sym = el.getAttribute('data-chart');
@@ -604,6 +875,7 @@ function applyChartRoute(chartSymbol, displayName) {
 
   state._chartSymbol = chartSymbol;
   state._chartName = displayName;
+  syncChartFavButton();
   state.currentScreen = 'chart';
   state.chartTimeframe = '1D';
   document.querySelectorAll('.chart-tf-btn').forEach((b) => {
@@ -644,7 +916,8 @@ async function refreshChartData() {
   const cfg = CHART_TF[tf];
   if (!cfg) return;
 
-  const to = Math.floor(Date.now() / 1000);
+  // Tramos de 5 min: todos los usuarios piden la misma URL y la CDN responde por Yahoo.
+  const to = Math.ceil(Date.now() / 300_000) * 300;
   const from = to - cfg.rangeSec;
   const loading = $('chart-page-loading');
   const errEl = $('chart-page-error');
@@ -793,6 +1066,7 @@ async function renderMarketChart(candles) {
 
 function bindChartPage() {
   $('chart-page-back')?.addEventListener('click', chartGoBack);
+  $('chart-fav-btn')?.addEventListener('click', () => toggleMarketFav(state._chartSymbol));
   $('chart-timeframes')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.chart-tf-btn');
     if (!btn) return;
@@ -1099,13 +1373,13 @@ function renderProfileModal() {
   
   modal.innerHTML = `
     <div style="text-align:center;padding:20px 0;border-bottom:1px solid #e1e3e4;margin-bottom:20px;">
-      <div style="width:56px;height:56px;border-radius:50%;background:#edeeef;border:1px solid #c1c8c7;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:#0f2d2e;">${email[0]?.toUpperCase() || '?'}</div>
+      <div style="width:56px;height:56px;border-radius:50%;background:#edeeef;border:1px solid #c1c8c7;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:#0f2d2e;">${escapeHtml(email[0]?.toUpperCase() || '?')}</div>
       <div style="font-size:15px;font-weight:500;">${escapeHtml(email)}</div>
       <div style="margin-top:8px;">${planBadge}</div>
       ${!isPrem ? `<p style="font-size:13px;color:var(--ink-dim);margin-top:14px;line-height:1.45;">Plan <strong>Free</strong>: 5 noticias del día y mercados. <strong>Premium</strong>: todas las noticias, histórico y guardar.</p>
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e1e3e4;">
         <div style="font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:10px;">Suscripción Premium</div>
-        <p style="font-size:12px;color:var(--ink-muted);margin:0 0 12px;line-height:1.4;">Pago seguro con Stripe · cancela cuando quieras</p>
+        <p style="font-size:12px;color:var(--ink-muted);margin:0 0 12px;line-height:1.4;">IVA incluido · se renueva automáticamente · cancela cuando quieras · 14 días de desistimiento. Pago seguro con Stripe. <a href="/terminos" target="_blank" rel="noopener" style="color:inherit;">Términos</a></p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button type="button" onclick="startStripeCheckout('monthly')" style="flex:1;min-width:120px;padding:12px 14px;background:#0f2d2e;border:none;border-radius:10px;color:#fff;font-weight:600;cursor:pointer;font-size:13px;">5 € / mes</button>
           <button type="button" onclick="startStripeCheckout('yearly')" style="flex:1;min-width:120px;padding:12px 14px;background:transparent;border:1px solid #c1c8c7;color:var(--ink);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">20 € / año</button>
@@ -1145,9 +1419,10 @@ async function signOut() {
   try {
     const modal = $('profile-modal');
     if (modal) modal.classList.remove('open');
-    const saved = localStorage.getItem('lente.saved');
+    const keep = ['lente.saved', MARKET_FAVS_KEY, 'lente.cookies-ack'].map((k) => [k, localStorage.getItem(k)]);
     localStorage.clear();
-    if (saved) localStorage.setItem('lente.saved', saved);
+    for (const [k, v] of keep) if (v != null) localStorage.setItem(k, v);
+    void forgetSessionCookie();
     state.session = null;
     state.profile = null;
     state.savedIds.clear();
@@ -1491,6 +1766,58 @@ function updateProfileBtn() {
   }
 }
 
+// ----- Sesión persistente: cookie HttpOnly (/api/session) con el refresh token -----
+const SESSION_ENDPOINT = '/api/session';
+let rememberedRefreshToken = null;
+
+function rememberSessionCookie(session) {
+  const token = session?.refresh_token;
+  if (!token || token === rememberedRefreshToken) return;
+  rememberedRefreshToken = token;
+  fetch(SESSION_ENDPOINT, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: token }),
+    keepalive: true,
+  })
+    .then((r) => { if (!r.ok) rememberedRefreshToken = null; })
+    .catch(() => { rememberedRefreshToken = null; });
+}
+
+function forgetSessionCookie() {
+  rememberedRefreshToken = null;
+  return fetch(SESSION_ENDPOINT, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => {});
+}
+
+/** Si el navegador perdió la sesión local, la recupera desde la cookie del servidor. */
+async function restoreSessionFromCookie() {
+  try {
+    const r = await fetch(SESSION_ENDPOINT, { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return null;
+    const { refresh_token: token } = await r.json();
+    if (!token) return null;
+    const { data, error } = await supabaseClient.auth.refreshSession({ refresh_token: token });
+    if (error || !data?.session) {
+      // Solo se descarta si Supabase rechaza el token (no por estar sin conexión)
+      if (error?.status >= 400 && error.status < 500) await forgetSessionCookie();
+      return null;
+    }
+    return data.session;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function applyRestoredSession(session) {
+  state.session = session;
+  rememberSessionCookie(session);
+  await loadProfile(session.user.id);
+  await Promise.all([loadSavedCards(), syncMarketFavsFromProfile(session.user.id)]);
+  updateProfileBtn();
+  await loadFeed();
+}
+
 async function setupAuthListener() {
   if (authListenerInitialized) return;
   authListenerInitialized = true;
@@ -1498,14 +1825,19 @@ async function setupAuthListener() {
     await waitForSupabase();
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       state.session = session;
+      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+        rememberSessionCookie(session);
+      }
       if (event === 'SIGNED_IN' && session) {
         loadProfileFromLocalStorage();
         await loadProfile(session.user.id);
+        await syncMarketFavsFromProfile(session.user.id);
         await loadSavedCards();
         await loadFeed();
         updateProfileBtn();
         renderFeed();
       } else if (event === 'SIGNED_OUT') {
+        void forgetSessionCookie();
         state.profile = null;
         state.savedIds.clear();
         localStorage.removeItem('lente.profile');
@@ -1522,13 +1854,21 @@ async function setupAuthListener() {
 async function initAuth() {
   try {
     await waitForSupabase();
-    const { data: { session } } = await supabaseClient.auth.getSession();
+    let { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
+      // Sin conexión o con Supabase lento, no se bloquea el feed; la sesión se aplica al llegar.
+      const restoring = restoreSessionFromCookie();
+      session = await Promise.race([restoring, new Promise((r) => setTimeout(() => r(null), 4000))]);
+      if (!session) restoring.then((late) => { if (late && !state.session) void applyRestoredSession(late); });
+    }
     state.session = session;
     if (session) {
+      rememberSessionCookie(session);
       loadProfileFromLocalStorage();
       await Promise.all([
         loadProfile(session.user.id),
         loadSavedCards(),
+        syncMarketFavsFromProfile(session.user.id),
       ]);
     }
   } catch (err) {
@@ -1542,6 +1882,8 @@ async function startApp() {
   } catch (err) {
     console.error('Error startApp:', err);
   }
+  // El ticker de Hoy muestra los favoritos: cargar mercados sin esperar a abrir la pestaña.
+  if (state.markets.flat.length === 0) loadMarkets();
 }
 
 function bindCookieBanner() {
@@ -1564,6 +1906,7 @@ async function init() {
   }
   scrollFeedToStart();
   bindCookieBanner();
+  bindFeedFit();
   bindChartPage();
   initChartRoute();
   await initAuth();

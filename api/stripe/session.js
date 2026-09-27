@@ -10,19 +10,19 @@ import {
   getSupabaseAdmin,
   getStripeSecretKey,
 } from '../_lib/clients.js';
+import { rateLimit } from '../_lib/rate-limit.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  if (!rateLimit(req, res, { max: 10, name: 'stripe-session' })) return;
+
   const secret = getStripeSecretKey();
   if (!secret) {
-    return res.status(500).json({
-      error: 'STRIPE_SECRET_KEY no configurada',
-      hint:
-        'En Vercel: guarda STRIPE_SECRET_KEY (Developers → API keys en Stripe) y haz Redeploy. En local: copia la misma línea en .env.local',
-    });
+    console.error('[stripe session] STRIPE_SECRET_KEY no configurada');
+    return res.status(500).json({ error: 'Pagos no disponibles ahora mismo' });
   }
 
   let body = {};
@@ -49,7 +49,8 @@ export default async function handler(req, res) {
     try {
       admin = getSupabaseAdmin();
     } catch (e) {
-      return res.status(500).json({ error: e.message });
+      console.error('[stripe portal] supabase', e.message);
+      return res.status(500).json({ error: 'Error interno' });
     }
 
     const { data: prof, error } = await admin
@@ -72,7 +73,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ url: portal.url });
     } catch (err) {
       console.error('[stripe portal]', err.message);
-      return res.status(500).json({ error: err.message || 'Stripe error' });
+      return res.status(500).json({ error: 'No se pudo abrir el portal de facturación' });
     }
   }
 
@@ -83,20 +84,10 @@ export default async function handler(req, res) {
   const envPriceName =
     billing === 'yearly' ? 'STRIPE_PRICE_YEARLY' : 'STRIPE_PRICE_MONTHLY';
   const priceId = billing === 'yearly' ? priceYearly : priceMonthly;
-  if (!priceId) {
-    return res.status(500).json({
-      error: `Falta ${envPriceName} en el servidor`,
-    });
-  }
-  if (priceId.startsWith('prod_')) {
-    return res.status(500).json({
-      error: `${envPriceName} usa un ID de producto (prod_…). Stripe Checkout necesita el Price ID (price_…). En el dashboard: Product catalog → tu producto → Pricing → copia el ID que empieza por price_.`,
-    });
-  }
-  if (!priceId.startsWith('price_')) {
-    return res.status(500).json({
-      error: `${envPriceName} debe ser un Price ID (empieza por price_). Revisa Stripe → Product catalog.`,
-    });
+  if (!priceId || !priceId.startsWith('price_')) {
+    // prod_… es el error típico: Checkout necesita el Price ID (price_…) del producto.
+    console.error(`[stripe checkout] ${envPriceName} vacío o no es un Price ID (price_…)`);
+    return res.status(500).json({ error: 'Pagos no disponibles ahora mismo' });
   }
 
   const metadata = { supabase_user_id: user.id };
@@ -136,7 +127,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ url: session.url });
   } catch (err) {
     console.error('[stripe checkout]', err.message);
-    return res.status(500).json({ error: err.message || 'Stripe error' });
+    return res.status(500).json({ error: 'No se pudo iniciar el pago' });
   }
 }
 

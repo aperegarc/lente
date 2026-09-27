@@ -1,8 +1,9 @@
-const VERSION = 'lente-v6';
+const VERSION = 'lente-v8';
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
+  '/fonts/app.css',
   '/app.js',
   '/vendor/supabase.js',
   '/manifest.json',
@@ -31,6 +32,8 @@ self.addEventListener('fetch', (event) => {
   // CDN, APIs y config dinámica: sin interceptar (evita CSP + caché vacía)
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname === '/config.js') return;
+  // Vídeos de la web de presentación: pesados y con peticiones parciales, fuera de la caché.
+  if (url.pathname.startsWith('/media/')) return;
   if (url.hostname.includes('supabase')) return;
 
   event.respondWith(

@@ -1,7 +1,12 @@
 // GET /api/public-config — config del cliente (solo URL + anon key, desde env del servidor)
 // En producción, vercel.json reescribe /config.js → aquí.
+// /api/session se reescribe aquí con ?op=session (misma función para no sumar otra serverless).
+
+import { handleSessionCookie } from './_lib/session-cookie.js';
 
 export default function handler(req, res) {
+  if (req.query?.op === 'session') return handleSessionCookie(req, res);
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).send('Method not allowed');

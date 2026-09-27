@@ -11,6 +11,8 @@ import {
 import { rateLimitRoute } from './_lib/rate-limit.js';
 import { QUERY_LIMITS, firstQuery, sanitizeText, clampInt } from './_lib/validate.js';
 
+const UPSTREAM_TIMEOUT_MS = 6000;
+
 /**
  * Histórico vía API pública de gráficos Yahoo (v8). Mismo tipo de dato que usan muchas apps;
  * el parámetro `range` aproxima el periodo (7d, 1mo, 3mo, 1y).
@@ -29,6 +31,7 @@ async function fetchYahooV8ChartSeries(symbol, days) {
   try {
     const r = await fetch(url, {
       headers: { 'User-Agent': 'lente-markets/1.0 (educational reference)' },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     if (!r.ok) return [];
     const j = await r.json();
@@ -60,29 +63,30 @@ async function fetchFrankfurterBatched() {
   try {
     const r = await fetch(
       `https://api.frankfurter.app/latest?from=EUR&to=${q}`,
-      { headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) },
     );
     if (r.ok) latest = await r.json();
   } catch (_) {
     /* red opcional */
   }
   let prev = null;
-  for (let d = 1; d <= 7; d++) {
-    const dt = new Date();
-    dt.setUTCDate(dt.getUTCDate() - d);
-    const ds = dt.toISOString().slice(0, 10);
-    try {
-      const r = await fetch(
-        `https://api.frankfurter.app/${ds}?from=EUR&to=${q}`,
-        { headers: { Accept: 'application/json' } },
-      );
-      if (r.ok) {
-        prev = await r.json();
-        break;
-      }
-    } catch (_) {
-      /* siguiente día */
+  try {
+    const start = new Date();
+    start.setUTCDate(start.getUTCDate() - 8);
+    const end = new Date();
+    end.setUTCDate(end.getUTCDate() - 1);
+    const r = await fetch(
+      `https://api.frankfurter.app/${utcDateStr(start)}..${utcDateStr(end)}?from=EUR&to=${q}`,
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) },
+    );
+    if (r.ok) {
+      const j = await r.json();
+      const dates = Object.keys(j.rates || {}).sort();
+      const last = dates.filter((d) => d !== latest?.date).pop();
+      if (last) prev = { date: last, rates: j.rates[last] };
     }
+  } catch (_) {
+    /* red opcional */
   }
   return { latest, prev };
 }
@@ -94,7 +98,10 @@ async function fetchCoinGeckoBatch() {
   if (ids.length === 0) return {};
   const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids.join(','))}&vs_currencies=eur&include_24hr_change=true`;
   try {
-    const r = await fetch(url, { headers: { Accept: 'application/json' } });
+    const r = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
     if (!r.ok) return {};
     return await r.json();
   } catch (_) {
@@ -188,7 +195,10 @@ async function fetchFrankfurterSeries(frankfurterTo, days) {
   const start = new Date();
   start.setUTCDate(start.getUTCDate() - Math.min(730, Math.max(7, days)));
   const url = `https://api.frankfurter.app/${utcDateStr(start)}..${utcDateStr(end)}?from=EUR&to=${frankfurterTo}`;
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  const r = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!r.ok) return [];
   const j = await r.json();
   const rates = j.rates || {};
@@ -206,7 +216,10 @@ async function fetchFrankfurterSeries(frankfurterTo, days) {
 async function fetchCoinGeckoSeries(coingeckoId, days) {
   const d = Math.min(365, Math.max(1, days));
   const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(coingeckoId)}/market_chart?vs_currency=eur&days=${d}`;
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  const r = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!r.ok) return [];
   const j = await r.json();
   const prices = j.prices || [];
@@ -353,7 +366,7 @@ export default async function handler(req, res) {
       return res.status(200).json(body);
     } catch (err) {
       console.error('[markets series]', err);
-      return res.status(500).json({ error: err.message || 'series failed' });
+      return res.status(500).json({ error: 'Error interno' });
     }
   }
 
@@ -369,7 +382,8 @@ export default async function handler(req, res) {
   try {
     supabase = getSupabaseAnon();
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('[markets] supabase', err.message);
+    return res.status(500).json({ error: 'Error interno' });
   }
 
   if (universe) {
@@ -378,7 +392,7 @@ export default async function handler(req, res) {
       return res.status(200).json(body);
     } catch (err) {
       console.error('[markets universe]', err);
-      return res.status(500).json({ error: err.message || 'universe failed' });
+      return res.status(500).json({ error: 'Error interno' });
     }
   }
 
@@ -388,7 +402,7 @@ export default async function handler(req, res) {
   if (category) query = query.eq('category', category);
 
   const { data, error } = await query.order('category').order('name');
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: 'Error interno' });
 
   const grouped = {};
   for (const m of data || []) {

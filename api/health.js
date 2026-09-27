@@ -15,8 +15,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const isProd = process.env.VERCEL_ENV === 'production';
-  if (isProd) {
+  // Previews de Vercel también son públicas y suelen apuntar a la misma base de datos.
+  if (process.env.VERCEL === '1') {
     const admin = await requireAdmin(req);
     if (!admin) {
       return res.status(404).json({ error: 'Not found' });

@@ -12,11 +12,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <title>lente · noticias económicas explicadas</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+  <link rel="stylesheet" href="/fonts/app.css">
   <link rel="stylesheet" href="/styles.css">
 </head>
 
@@ -124,6 +120,9 @@
               <h1 class="chart-page-name" id="chart-page-name">—</h1>
               <p class="chart-page-symbol" id="chart-page-symbol"></p>
             </div>
+            <button type="button" class="market-fav-btn chart-fav-btn" id="chart-fav-btn" aria-pressed="false" aria-label="Añadir a favoritos">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>
+            </button>
           </header>
           <div class="chart-timeframes" id="chart-timeframes" role="tablist" aria-label="Periodo">
             <button type="button" class="chart-tf-btn active" data-tf="1D" role="tab" aria-selected="true">1D</button>

@@ -92,9 +92,15 @@ export async function fetchYahooCandles(yahooSymbol, fromUnix, toUnix, resolutio
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}` +
     `?period1=${period1}&period2=${period2}&interval=${encodeURIComponent(interval)}`;
 
-  const r = await fetch(url, {
-    headers: { 'User-Agent': 'lente-markets/1.0 (educational reference)' },
-  });
+  let r;
+  try {
+    r = await fetch(url, {
+      headers: { 'User-Agent': 'lente-markets/1.0 (educational reference)' },
+      signal: AbortSignal.timeout(6000),
+    });
+  } catch {
+    return null;
+  }
   if (!r.ok) return null;
 
   let j;

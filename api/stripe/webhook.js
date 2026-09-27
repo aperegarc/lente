@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
   } catch (err) {
     console.error('[stripe webhook] firma:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    return res.status(400).send('Webhook Error: firma inválida');
   }
 
   let admin;
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     admin = getSupabaseAdmin();
   } catch (e) {
     console.error('[stripe webhook] supabase:', e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: 'Error interno' });
   }
 
   try {
@@ -151,7 +151,7 @@ export default async function handler(req, res) {
     }
   } catch (e) {
     console.error('[stripe webhook]', e);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: 'Error interno' });
   }
 
   return res.status(200).json({ received: true });

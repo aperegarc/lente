@@ -2,6 +2,7 @@
 // /api/_lib/clients.js
 // ============================================================
 
+import { timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
 function requireEnv(name, hint = '') {
@@ -63,8 +64,9 @@ export function isValidCronRequest(req) {
     console.error('❌ CRON_SECRET no está configurado o es demasiado corto (mín. 32)');
     return false;
   }
-  const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${secret}`) return false;
+  const got = Buffer.from(String(req.headers.authorization || ''));
+  const want = Buffer.from(`Bearer ${secret}`);
+  if (got.length !== want.length || !timingSafeEqual(got, want)) return false;
   // Producción: cron de Vercel (x-vercel-cron) o disparo interno desde /api/admin/trigger
   if (process.env.VERCEL === '1' && process.env.VERCEL_ENV === 'production') {
     const fromVercelCron = req.headers['x-vercel-cron'] === '1' || req.headers['x-vercel-cron'] === 1;

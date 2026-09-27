@@ -6,6 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "node dev.js",
+    "demo": "node local-demo/server.mjs",
+    "test": "node --test tests/",
+    "test:e2e": "node tests/e2e/feed-layout.e2e.mjs && node tests/e2e/app-features.e2e.mjs && node tests/e2e/presentacion.e2e.mjs",
+    "promo:video": "node promo/grabar-video.mjs",
     "admin:login": "node scripts/admin-login-link.js",
     "admin:password": "node scripts/reset-admin-password.js",
     "deploy": "vercel --prod"
